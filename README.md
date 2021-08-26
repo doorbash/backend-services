@@ -59,10 +59,10 @@ IMAGE_NAME_NGINX="nginx:1.21.1-alpine"
 ./run.sh logs
 ```
 
-## Postman documentation
+## Postman
 https://documenter.getpostman.com/view/13117984/TzzGGtSs
 
-## TODO
+## Todo
 - Android client
 - Push notification (FCM, Pull based)
 - Ads
