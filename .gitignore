@@ -1,0 +1,7 @@
+.env
+api/api
+docker/nginx/cert/fullchain.pem
+docker/nginx/cert/privkey.pem
+docker/pg-admin/servers.json
+docker/pg-admin/pgadmin4.db*
+docker/redis/
