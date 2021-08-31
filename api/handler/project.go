@@ -1,14 +1,13 @@
 package handler
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
-	"github.com/doorbash/backend-services-api/api/domain"
-	"github.com/doorbash/backend-services-api/api/util"
+	"github.com/doorbash/backend-services/api/domain"
+	"github.com/doorbash/backend-services/api/util"
+	"github.com/doorbash/backend-services/api/util/middleware"
 
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v4"
@@ -21,14 +20,16 @@ type ProjectHandler struct {
 }
 
 func (pr *ProjectHandler) GetAllProjectsHandler(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+
+	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	user, err := pr.userRepo.GetByEmail(ctx, r.Header.Get("email"))
+	user, err := pr.userRepo.GetByEmail(ctx, authUser.Email)
 	if err != nil {
 		util.WriteStatus(w, http.StatusNotFound)
 		return
 	}
-	ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	projects, err := pr.prRepo.GetProjectsByUserID(ctx, user.ID)
 	if err != nil {
@@ -39,13 +40,14 @@ func (pr *ProjectHandler) GetAllProjectsHandler(w http.ResponseWriter, r *http.R
 }
 
 func (pr *ProjectHandler) GetProjectHandler(w http.ResponseWriter, r *http.Request) {
+	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+
 	projectVar, ok := mux.Vars(r)["id"]
 	if !ok {
 		util.WriteInternalServerError(w)
 		return
 	}
-	var project *domain.Project
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	project, err := pr.prRepo.GetByID(ctx, projectVar)
 	if err != nil {
@@ -56,11 +58,20 @@ func (pr *ProjectHandler) GetProjectHandler(w http.ResponseWriter, r *http.Reque
 		}
 		return
 	}
+
+	if project.UserID != authUser.ID {
+		util.WriteStatus(w, http.StatusForbidden)
+		return
+	}
+
 	util.WriteJson(w, project)
 }
 
-func (pr *ProjectHandler) CreateProjectHandler(w http.ResponseWriter, r *http.Request, jsonBody *interface{}) {
-	body, ok := (*jsonBody).(map[string]interface{})
+func (pr *ProjectHandler) CreateProjectHandler(w http.ResponseWriter, r *http.Request) {
+	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonBody := r.Context().Value("json")
+
+	body, ok := jsonBody.(map[string]interface{})
 	if !ok {
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
@@ -77,9 +88,9 @@ func (pr *ProjectHandler) CreateProjectHandler(w http.ResponseWriter, r *http.Re
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	user, err := pr.userRepo.GetByEmail(ctx, r.Header.Get("email"))
+	user, err := pr.userRepo.GetByEmail(ctx, authUser.Email)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			util.WriteUnauthorized(w)
@@ -93,7 +104,7 @@ func (pr *ProjectHandler) CreateProjectHandler(w http.ResponseWriter, r *http.Re
 		UserID: user.ID,
 		Name:   name,
 	}
-	ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	err = pr.prRepo.Insert(ctx, project)
 	if err != nil {
@@ -108,8 +119,11 @@ func (pr *ProjectHandler) CreateProjectHandler(w http.ResponseWriter, r *http.Re
 	util.WriteOK(w)
 }
 
-func (pr *ProjectHandler) UpdateProjectHandler(w http.ResponseWriter, r *http.Request, jsonBody *interface{}) {
-	body, ok := (*jsonBody).(map[string]interface{})
+func (pr *ProjectHandler) UpdateProjectHandler(w http.ResponseWriter, r *http.Request) {
+	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonBody := r.Context().Value("json")
+
+	body, ok := jsonBody.(map[string]interface{})
 	if !ok {
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
@@ -126,9 +140,9 @@ func (pr *ProjectHandler) UpdateProjectHandler(w http.ResponseWriter, r *http.Re
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	_, err := pr.userRepo.GetByEmail(ctx, r.Header.Get("email"))
+	_, err := pr.userRepo.GetByEmail(ctx, authUser.Email)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			util.WriteUnauthorized(w)
@@ -137,7 +151,7 @@ func (pr *ProjectHandler) UpdateProjectHandler(w http.ResponseWriter, r *http.Re
 		}
 		return
 	}
-	ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	project, err := pr.prRepo.GetByID(ctx, id)
 	if err != nil {
@@ -147,6 +161,11 @@ func (pr *ProjectHandler) UpdateProjectHandler(w http.ResponseWriter, r *http.Re
 		} else {
 			util.WriteInternalServerError(w)
 		}
+		return
+	}
+
+	if project.UserID != authUser.ID {
+		util.WriteStatus(w, http.StatusForbidden)
 		return
 	}
 
@@ -157,7 +176,7 @@ func (pr *ProjectHandler) UpdateProjectHandler(w http.ResponseWriter, r *http.Re
 
 	project.Name = name
 
-	ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	err = pr.prRepo.Update(ctx, project)
 	if err != nil {
@@ -168,8 +187,11 @@ func (pr *ProjectHandler) UpdateProjectHandler(w http.ResponseWriter, r *http.Re
 	util.WriteOK(w)
 }
 
-func (pr *ProjectHandler) DeleteProjectHandler(w http.ResponseWriter, r *http.Request, jsonBody *interface{}) {
-	body, ok := (*jsonBody).(map[string]interface{})
+func (pr *ProjectHandler) DeleteProjectHandler(w http.ResponseWriter, r *http.Request) {
+	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonBody := r.Context().Value("json")
+
+	body, ok := jsonBody.(map[string]interface{})
 	if !ok {
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
@@ -180,19 +202,8 @@ func (pr *ProjectHandler) DeleteProjectHandler(w http.ResponseWriter, r *http.Re
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-	user, err := pr.userRepo.GetByEmail(ctx, r.Header.Get("email"))
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			util.WriteUnauthorized(w)
-		} else {
-			util.WriteInternalServerError(w)
-		}
-		return
-	}
 
-	ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	project, err := pr.prRepo.GetByID(ctx, id)
 	if err != nil {
@@ -205,12 +216,12 @@ func (pr *ProjectHandler) DeleteProjectHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if user.ID != project.UserID {
+	if project.UserID != authUser.ID {
 		util.WriteStatus(w, http.StatusForbidden)
 		return
 	}
 
-	ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	err = pr.prRepo.Delete(ctx, project)
 	if err != nil {
@@ -231,8 +242,11 @@ func NewProjectHandler(r *mux.Router, authMiddleware mux.MiddlewareFunc, prRepo 
 	rc.router.Use(authMiddleware)
 	rc.router.HandleFunc("/", rc.GetAllProjectsHandler).Methods("GET")
 	rc.router.HandleFunc("/{id}/", rc.GetProjectHandler).Methods("GET")
-	rc.router.HandleFunc("/new", util.JsonBodyMiddleware(rc.CreateProjectHandler).ServeHTTP).Methods("POST")
-	rc.router.HandleFunc("/delete", util.JsonBodyMiddleware(rc.DeleteProjectHandler).ServeHTTP).Methods("POST")
-	rc.router.HandleFunc("/update", util.JsonBodyMiddleware(rc.UpdateProjectHandler).ServeHTTP).Methods("POST")
+
+	subrouter := rc.router.NewRoute().Subrouter()
+	subrouter.Use(middleware.JsonBodyMiddleware)
+	subrouter.HandleFunc("/new", rc.CreateProjectHandler).Methods("POST")
+	subrouter.HandleFunc("/delete", rc.DeleteProjectHandler).Methods("POST")
+	subrouter.HandleFunc("/update", rc.UpdateProjectHandler).Methods("POST")
 	return rc
 }

@@ -1,4 +1,4 @@
-# backend-services-api
+# backend-services
 [UNDER DEVELOPMENT] A couple of backend service APIs for Android apps (remote config, push, ads) 
 
 ## Prerequisites
@@ -49,13 +49,14 @@ PGADMIN_DEFAULT_PASSWORD="PUT_PG_ADMIN_PASSWORD_HERE"
 
 IMAGE_NAME_POSTGRES="postgres:14beta3-alpine3.14"
 IMAGE_NAME_PGADMIN="dpage/pgadmin4:5.6"
-IMAGE_NAME_API="backend-ir/api"
+IMAGE_NAME_API="backend-services/api"
 IMAGE_NAME_NGINX="nginx:1.21.1-alpine"
+IMAGE_NAME_NOTIFICATION="backend-services/notification"
 ```
 
 ## Run
 ```
-./run.sh logs
+./run.sh logs api
 ```
 
 ## Postman

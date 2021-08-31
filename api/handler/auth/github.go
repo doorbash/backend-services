@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
 
-	"github.com/doorbash/backend-services-api/api/domain"
-	"github.com/doorbash/backend-services-api/api/util"
+	"github.com/doorbash/backend-services/api/domain"
+	"github.com/doorbash/backend-services/api/util"
+	"github.com/doorbash/backend-services/api/util/middleware"
 	"github.com/google/go-github/github"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
@@ -40,7 +40,7 @@ type GithubOAuth2Handler struct {
 }
 
 func (o *GithubOAuth2Handler) Middleware(h http.Handler) http.Handler {
-	return util.OAuth2Middleware(o.authCache, o.admin, h)
+	return middleware.OAuth2Middleware(o.authCache, o.admin, h)
 }
 
 func (o *GithubOAuth2Handler) LoginHandler(w http.ResponseWriter, r *http.Request) {
@@ -61,13 +61,13 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 	session, err := o.store.Get(r, SESSION_STORE_KEY)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintln(w, "Aborted")
+		util.WriteError(w, http.StatusInternalServerError, "Aborted")
 		return
 	}
 
 	if r.URL.Query().Get("state") != session.Values["state"] {
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintln(w, "No state match; possible csrf OR cookies not enabled")
+		util.WriteError(w, http.StatusInternalServerError, "No state match; possible csrf OR cookies not enabled")
 		return
 	}
 
@@ -77,19 +77,19 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		log.Println(err)
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintln(w, "There was an issue getting your token")
+		util.WriteError(w, http.StatusInternalServerError, "There was an issue getting your token")
 		return
 	}
 
 	if !token.Valid() {
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintln(w, "Retreived invalid token")
+		util.WriteError(w, http.StatusInternalServerError, "Retreived invalid token")
 		return
 	}
 
 	client := github.NewClient(o.oauthCfg.Client(r.Context(), token))
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	githubUser, _, err := client.Users.Get(ctx, "")
 
@@ -98,15 +98,16 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 			log.Println(err)
 		}
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintln(w, "Error getting email from github. Please make sure you have set your email as Public email in Github settings.")
+		util.WriteError(w, http.StatusInternalServerError, "Error getting email from github. Please make sure you have set your email as Public email in Github settings.")
 		return
 	}
 
 	email := *githubUser.Email
+	var id int
 
-	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel = util.GetContextWithTimeout(context.Background())
 	defer cancel()
-	_, err = o.userRepo.GetByEmail(ctx, email)
+	user, err := o.userRepo.GetByEmail(ctx, email)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -116,9 +117,9 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 				util.WriteError(w, http.StatusForbidden, "This API is private. Please contact administrator.")
 				return
 			}
-			ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel = util.GetContextWithTimeout(context.Background())
 			defer cancel()
-			err = o.userRepo.Insert(ctx, &domain.User{Email: email, ProjectQuota: 0})
+			id, err = o.userRepo.Insert(ctx, &domain.User{Email: email, ProjectQuota: 0})
 			if err != nil {
 				log.Println(err)
 				util.WriteInternalServerError(w)
@@ -129,9 +130,12 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 			util.WriteInternalServerError(w)
 			return
 		}
+	} else {
+		id = user.ID
 	}
 
 	session.Values["email"] = email
+	session.Values["id"] = id
 	err = sessions.Save(r, w)
 
 	if err != nil {
@@ -152,16 +156,22 @@ func (o *GithubOAuth2Handler) CredentialsHandler(w http.ResponseWriter, r *http.
 		fmt.Fprintln(w, "Aborted")
 		return
 	}
-	email, ok := session.Values["email"]
+	email, ok := session.Values["email"].(string)
 	if !ok {
 		log.Println("no email")
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
 	}
+	id, ok := session.Values["id"].(int)
+	if !ok {
+		log.Println("no id")
+		util.WriteStatus(w, http.StatusBadRequest)
+		return
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := util.GetContextWithTimeout(context.Background())
 	defer cancel()
-	t, err := o.authCache.GenerateAndSaveToken(ctx, email.(string))
+	t, err := o.authCache.GenerateAndSaveToken(ctx, email, id)
 
 	if err != nil {
 		log.Println(err)
@@ -193,7 +203,7 @@ func (o *GithubOAuth2Handler) CredentialsHandler(w http.ResponseWriter, r *http.
 
 func (o *GithubOAuth2Handler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	token := r.Header.Get("token")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := util.GetContextWithTimeout(context.Background())
 	defer cancel()
 	err := o.authCache.DeleteToken(ctx, token)
 	if err != nil {

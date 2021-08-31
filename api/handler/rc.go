@@ -1,14 +1,13 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"net/http"
-	"time"
 
-	"github.com/doorbash/backend-services-api/api/domain"
-	"github.com/doorbash/backend-services-api/api/util"
+	"github.com/doorbash/backend-services/api/domain"
+	"github.com/doorbash/backend-services/api/util"
+	"github.com/doorbash/backend-services/api/util/middleware"
 	"github.com/go-redis/redis/v8"
 
 	"github.com/gorilla/mux"
@@ -29,14 +28,14 @@ func (rc *RemoteConfigHandler) GetDataHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var remoteConfig *domain.RemoteConfig
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	data, err := rc.rcCache.GetDataByProjectID(ctx, projectVar)
 	if err != nil {
 		log.Println(err)
 		if err == redis.Nil {
 			// nothing in cache. get data from db then save to cache
-			ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+			ctx, cancel = util.GetContextWithTimeout(r.Context())
 			defer cancel()
 			remoteConfig, err = rc.rcRepo.GetByProjectID(ctx, projectVar)
 			if err != nil {
@@ -47,7 +46,7 @@ func (rc *RemoteConfigHandler) GetDataHandler(w http.ResponseWriter, r *http.Req
 				}
 				return
 			}
-			ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+			ctx, cancel = util.GetContextWithTimeout(r.Context())
 			defer cancel()
 			err = rc.rcCache.Update(ctx, remoteConfig)
 			if err != nil {
@@ -64,15 +63,17 @@ func (rc *RemoteConfigHandler) GetDataHandler(w http.ResponseWriter, r *http.Req
 	util.WriteJsonRaw(w, data)
 }
 
-func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.Request, jsonBody *interface{}) {
+func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.Request) {
+	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonBody := r.Context().Value("json")
+
 	projectVar, ok := mux.Vars(r)["id"]
 	if !ok {
 		log.Println("no id")
 		util.WriteInternalServerError(w)
 		return
 	}
-	var project *domain.Project
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	project, err := rc.prRepo.GetByID(ctx, projectVar)
 	if err != nil {
@@ -84,13 +85,19 @@ func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.
 		}
 		return
 	}
+
+	if project.UserID != authUser.ID {
+		util.WriteStatus(w, http.StatusForbidden)
+		return
+	}
+
 	data, err := json.Marshal(jsonBody)
 	if err != nil {
 		log.Println(err)
 		util.WriteInternalServerError(w)
 		return
 	}
-	ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	remoteConfig, err := rc.rcRepo.GetByProjectID(ctx, project.ID)
 	if err != nil {
@@ -100,7 +107,7 @@ func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.
 				Data:      string(data),
 			}
 			log.Println(remoteConfig)
-			ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+			ctx, cancel = util.GetContextWithTimeout(r.Context())
 			defer cancel()
 			err = rc.rcRepo.Insert(ctx, remoteConfig)
 			if err != nil {
@@ -116,7 +123,7 @@ func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.
 		return
 	}
 	remoteConfig.Data = string(data)
-	ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	err = rc.rcRepo.Update(ctx, remoteConfig)
 	if err != nil {
@@ -124,7 +131,7 @@ func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.
 		util.WriteInternalServerError(w)
 		return
 	}
-	ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	// update cache
 	err = rc.rcCache.Update(ctx, remoteConfig)
@@ -155,9 +162,8 @@ func NewRemoteConfigHandler(
 	rc.router = r.PathPrefix(prefix).Subrouter()
 	rc.router.HandleFunc("/{id}/", rc.GetDataHandler).Methods("GET")
 
-	authRouter := rc.router.NewRoute().Subrouter()
-	authRouter.Use(authMiddleware)
-	authRouter.HandleFunc("/{id}/", util.JsonBodyMiddleware(rc.UpdateDataHandler).ServeHTTP).Methods("POST")
-
+	subrouter := rc.router.NewRoute().Subrouter()
+	subrouter.Use(authMiddleware, middleware.JsonBodyMiddleware)
+	subrouter.HandleFunc("/{id}/", rc.UpdateDataHandler).Methods("POST")
 	return rc
 }

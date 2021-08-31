@@ -3,12 +3,8 @@ package util
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
-
-	"github.com/gorilla/handlers"
 )
 
 type Result struct {
@@ -109,30 +105,4 @@ func GetUrlQueryParam(r *http.Request, key string) string {
 	}
 
 	return keys[0]
-}
-
-func LoggerMiddleware(h http.Handler) http.Handler {
-	return handlers.CustomLoggingHandler(os.Stdout, h, func(writer io.Writer, params handlers.LogFormatterParams) {
-		log.Println("HttpLogger:", params.Request.Method, params.Request.URL.Path, params.StatusCode)
-	})
-}
-
-func JsonBodyMiddleware(h func(w http.ResponseWriter, r *http.Request, body *interface{})) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		data, err := io.ReadAll(r.Body)
-		if err != nil {
-			log.Println(err)
-			WriteInternalServerError(w)
-			return
-		}
-		log.Println(string(data))
-		var jsonBody interface{}
-		err = json.Unmarshal(data, &jsonBody)
-		if err != nil {
-			log.Println(err)
-			WriteStatus(w, http.StatusBadRequest)
-			return
-		}
-		h(w, r, &jsonBody)
-	})
 }

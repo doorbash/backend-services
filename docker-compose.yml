@@ -33,7 +33,6 @@ services:
       API_ADMIN_EMAIL: ${API_ADMIN_EMAIL}
       API_LISTEN_ADDR: ${API_LISTEN_ADDR}
       API_PATH: ${API_PATH}
-      DATABASE_HOST: db
       DATABASE_USER: ${DATABASE_USER}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       DATABASE_NAME: ${DATABASE_NAME}
@@ -44,6 +43,18 @@ services:
       - db
       - redis
     image: ${IMAGE_NAME_API}
+  notification:
+    build: ./notification
+    restart: always
+    environment:
+      DATABASE_USER: ${DATABASE_USER}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      DATABASE_NAME: ${DATABASE_NAME}
+    depends_on:
+      - db
+      - redis
+      - api
+    image: ${IMAGE_NAME_NOTIFICATION}
   nginx:
     restart: always
     volumes: 

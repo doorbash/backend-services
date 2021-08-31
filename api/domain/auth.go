@@ -23,7 +23,7 @@ func (m *AuthToken) MarshalJSON() ([]byte, error) {
 
 type AuthCache interface {
 	GetTokenExpiry() time.Duration
-	GetEmailByToken(ctx context.Context, token string) (string, error)
-	GenerateAndSaveToken(ctx context.Context, email string) (string, error)
+	GetUserByToken(ctx context.Context, token string) (string, int, error)
+	GenerateAndSaveToken(ctx context.Context, email string, id int) (string, error)
 	DeleteToken(ctx context.Context, token string) error
 }

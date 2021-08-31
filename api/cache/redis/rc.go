@@ -2,9 +2,10 @@ package redis
 
 import (
 	"context"
+	"log"
 	"time"
 
-	"github.com/doorbash/backend-services-api/api/domain"
+	"github.com/doorbash/backend-services/api/domain"
 	"github.com/go-redis/redis/v8"
 )
 
@@ -21,9 +22,20 @@ func (c *RemoteConfigRedisCache) Update(ctx context.Context, rc *domain.RemoteCo
 	return c.rdb.Set(ctx, rc.ProjectID, rc.Data, c.dataExpiry).Err()
 }
 
-func NewRemoteConfigRedisCache(rdb *redis.Client, dataExpiry time.Duration) *RemoteConfigRedisCache {
+func NewRemoteConfigRedisCache(dataExpiry time.Duration) *RemoteConfigRedisCache {
 	return &RemoteConfigRedisCache{
-		rdb:        rdb,
+		rdb: redis.NewClient(&redis.Options{
+			Addr:            REDIS_ADDR,
+			Password:        "",
+			DB:              REDIS_DATABASE_AUTH,
+			MaxRetries:      0,
+			MinRetryBackoff: REDIS_MIN_RETRY_BACKOFF,
+			MaxRetryBackoff: REDIS_MAX_RETRY_BACKOFF,
+			OnConnect: func(ctx context.Context, cn *redis.Conn) error {
+				log.Println("redis:", "OnConnect()", "RemoteConfig")
+				return nil
+			},
+		}),
 		dataExpiry: dataExpiry,
 	}
 }

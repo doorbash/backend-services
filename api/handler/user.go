@@ -1,15 +1,14 @@
 package handler
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
-	"github.com/doorbash/backend-services-api/api/domain"
-	"github.com/doorbash/backend-services-api/api/util"
+	"github.com/doorbash/backend-services/api/domain"
+	"github.com/doorbash/backend-services/api/util"
+	"github.com/doorbash/backend-services/api/util/middleware"
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v4"
 )
@@ -20,7 +19,9 @@ type UserHandler struct {
 }
 
 func (u *UserHandler) UserProfileHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := u.repo.GetByEmail(r.Context(), r.Header.Get("email"))
+	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+
+	user, err := u.repo.GetByEmail(r.Context(), authUser.Email)
 	if err != nil {
 		log.Println(err)
 		if err == pgx.ErrNoRows {
@@ -34,30 +35,34 @@ func (u *UserHandler) UserProfileHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (u *UserHandler) UserRoleHandler(w http.ResponseWriter, r *http.Request) {
+	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+
 	ret := make(map[string]string)
-	ret["email"] = r.Header.Get("email")
-	ret["role"] = r.Header.Get("role")
+	ret["email"] = authUser.Email
+	ret["admin"] = fmt.Sprintf("%t", authUser.IsAdmin)
 	util.WriteJson(w, &ret)
 }
 
-func (u *UserHandler) AdminUpdateUserHandler(w http.ResponseWriter, r *http.Request, jsonBody *interface{}) {
-	email := r.Header.Get("email")
-	role := r.Header.Get("role")
-	if role != "admin" {
+func (u *UserHandler) AdminUpdateUserHandler(w http.ResponseWriter, r *http.Request) {
+	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonBody := r.Context().Value("json")
+
+	if !authUser.IsAdmin {
 		util.WriteStatus(w, http.StatusForbidden)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+
+	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	_, err := u.repo.GetByEmail(ctx, email)
+	_, err := u.repo.GetByEmail(ctx, authUser.Email)
 	if err != nil {
-		log.Println("email address", email, "is admin but there is no record in database for it.")
+		log.Println("email address", authUser.Email, "is admin but there is no record in database for it.")
 		util.WriteStatus(w, http.StatusNotFound)
 		return
 	}
-	body, ok := (*jsonBody).(map[string]interface{})
+	body, ok := jsonBody.(map[string]interface{})
 	if !ok {
-		log.Println("bad json")
+		log.Println("bad json", jsonBody)
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
 	}
@@ -67,7 +72,7 @@ func (u *UserHandler) AdminUpdateUserHandler(w http.ResponseWriter, r *http.Requ
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
 	}
-	ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	user, err := u.repo.GetByEmail(ctx, userEmail)
 	if err != nil {
@@ -100,7 +105,7 @@ func (u *UserHandler) AdminUpdateUserHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	user.ProjectQuota = projectQuota
-	ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	err = u.repo.Update(ctx, user)
 	if err != nil {
@@ -111,22 +116,24 @@ func (u *UserHandler) AdminUpdateUserHandler(w http.ResponseWriter, r *http.Requ
 	util.WriteOK(w)
 }
 
-func (u *UserHandler) AdminAddUserHandler(w http.ResponseWriter, r *http.Request, jsonBody *interface{}) {
-	email := r.Header.Get("email")
-	role := r.Header.Get("role")
-	if role != "admin" {
+func (u *UserHandler) AdminAddUserHandler(w http.ResponseWriter, r *http.Request) {
+	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonBody := r.Context().Value("json")
+
+	if !authUser.IsAdmin {
 		util.WriteStatus(w, http.StatusForbidden)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+
+	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	_, err := u.repo.GetByEmail(ctx, email)
+	_, err := u.repo.GetByEmail(ctx, authUser.Email)
 	if err != nil {
-		log.Println("email address", email, "is admin but there is no record in database for it.")
+		log.Println("email address", authUser.Email, "is admin but there is no record in database for it.")
 		util.WriteStatus(w, http.StatusNotFound)
 		return
 	}
-	body, ok := (*jsonBody).(map[string]interface{})
+	body, ok := jsonBody.(map[string]interface{})
 	if !ok {
 		util.WriteError(w, http.StatusBadRequest, "bad json")
 		return
@@ -152,9 +159,9 @@ func (u *UserHandler) AdminAddUserHandler(w http.ResponseWriter, r *http.Request
 		Email:        userEmail,
 		ProjectQuota: projectQuota,
 	}
-	ctx, cancel = context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	err = u.repo.Insert(ctx, user)
+	id, err := u.repo.Insert(ctx, user)
 	if err != nil {
 		log.Println(err)
 		if strings.HasPrefix(err.Error(), "ERROR: duplicate key") {
@@ -164,7 +171,7 @@ func (u *UserHandler) AdminAddUserHandler(w http.ResponseWriter, r *http.Request
 		}
 		return
 	}
-	util.WriteOK(w)
+	util.WriteJson(w, id)
 }
 
 func NewUserHandler(r *mux.Router, authMiddleware mux.MiddlewareFunc, repo domain.UserRepository, prefix string) *UserHandler {
@@ -172,11 +179,15 @@ func NewUserHandler(r *mux.Router, authMiddleware mux.MiddlewareFunc, repo domai
 		repo:   repo,
 		router: r,
 	}
+
 	rc.router = r.PathPrefix(prefix).Subrouter()
 	rc.router.Use(authMiddleware)
 	rc.router.HandleFunc("/profile", rc.UserProfileHandler).Methods("GET")
 	rc.router.HandleFunc("/role", rc.UserRoleHandler).Methods("GET")
-	rc.router.HandleFunc("/update", util.JsonBodyMiddleware(rc.AdminUpdateUserHandler).ServeHTTP).Methods("POST")
-	rc.router.HandleFunc("/new", util.JsonBodyMiddleware(rc.AdminAddUserHandler).ServeHTTP).Methods("POST")
+
+	subrouter := rc.router.NewRoute().Subrouter()
+	subrouter.Use(middleware.JsonBodyMiddleware)
+	subrouter.HandleFunc("/update", rc.AdminUpdateUserHandler).Methods("POST")
+	subrouter.HandleFunc("/new", rc.AdminAddUserHandler).Methods("POST")
 	return rc
 }

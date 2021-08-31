@@ -13,6 +13,6 @@ type User struct {
 
 type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (*User, error)
-	Insert(ctx context.Context, user *User) error
+	Insert(ctx context.Context, user *User) (int, error)
 	Update(ctx context.Context, user *User) error
 }

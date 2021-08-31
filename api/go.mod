@@ -1,9 +1,8 @@
-module github.com/doorbash/backend-services-api/api
+module github.com/doorbash/backend-services/api
 
 go 1.16
 
 require (
-	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redis/redis/v8 v8.11.3
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-querystring v1.1.0 // indirect
