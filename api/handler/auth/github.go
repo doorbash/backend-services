@@ -60,14 +60,12 @@ func (o *GithubOAuth2Handler) LoginHandler(w http.ResponseWriter, r *http.Reques
 func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Request) {
 	session, err := o.store.Get(r, SESSION_STORE_KEY)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		util.WriteError(w, http.StatusInternalServerError, "Aborted")
+		util.WriteError(w, http.StatusBadRequest, "Aborted")
 		return
 	}
 
 	if r.URL.Query().Get("state") != session.Values["state"] {
-		w.WriteHeader(http.StatusBadRequest)
-		util.WriteError(w, http.StatusInternalServerError, "No state match; possible csrf OR cookies not enabled")
+		util.WriteError(w, http.StatusBadRequest, "No state match; possible csrf OR cookies not enabled")
 		return
 	}
 
@@ -76,14 +74,12 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 	token, err := o.oauthCfg.Exchange(r.Context(), r.URL.Query().Get("code"))
 	if err != nil {
 		log.Println(err)
-		w.WriteHeader(http.StatusBadRequest)
-		util.WriteError(w, http.StatusInternalServerError, "There was an issue getting your token")
+		util.WriteError(w, http.StatusBadRequest, "There was an issue getting your token")
 		return
 	}
 
 	if !token.Valid() {
-		w.WriteHeader(http.StatusBadRequest)
-		util.WriteError(w, http.StatusInternalServerError, "Retreived invalid token")
+		util.WriteError(w, http.StatusBadRequest, "Retreived invalid token")
 		return
 	}
 
@@ -97,8 +93,7 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 		if err != nil {
 			log.Println(err)
 		}
-		w.WriteHeader(http.StatusBadRequest)
-		util.WriteError(w, http.StatusInternalServerError, "Error getting email from github. Please make sure you have set your email as Public email in Github settings.")
+		util.WriteError(w, http.StatusBadRequest, "Error getting email from github. Please make sure you have set your email as Public email in Github settings.")
 		return
 	}
 
@@ -152,8 +147,7 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 func (o *GithubOAuth2Handler) CredentialsHandler(w http.ResponseWriter, r *http.Request) {
 	session, err := o.store.Get(r, SESSION_STORE_KEY)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintln(w, "Aborted")
+		util.WriteError(w, http.StatusBadRequest, "Aborted")
 		return
 	}
 	email, ok := session.Values["email"].(string)

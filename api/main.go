@@ -102,7 +102,7 @@ func main() {
 		r,
 		authHandler.Middleware,
 		noRepo, projectRepo,
-		_redis.NewNotificationRedisCache(24*time.Hour),
+		_redis.NewNotificationRedisCache(),
 		"/notifications",
 	)
 

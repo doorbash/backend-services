@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"time"
+
+	"github.com/jackc/pgtype"
 )
 
 const (
@@ -14,19 +16,20 @@ const (
 )
 
 type Notification struct {
-	ID        int       `json:"id"`
-	PID       string    `json:"pid"`
-	Status    int       `json:"status"`
-	Title     string    `json:"title"`
-	Text      string    `json:"text"`
-	CreatedAt time.Time `json:"created_at"`
-	ActivedAt time.Time `json:"actived_at"`
-	ExpiresAt time.Time `json:"expires_at"`
+	ID           int                `json:"id"`
+	PID          string             `json:"pid"`
+	Status       int                `json:"status"`
+	Title        string             `json:"title"`
+	Text         string             `json:"text"`
+	CreateTime   pgtype.Timestamptz `json:"create_time"`
+	ActiveTime   pgtype.Timestamptz `json:"active_time"`
+	ExpireTime   pgtype.Timestamptz `json:"expire_time"`
+	ScheduleTime pgtype.Timestamptz `json:"schedule_time"`
 }
 
 type NotificationCache interface {
-	GetTimeByProjectID(ctx context.Context, pid string) (time.Time, error)
-	GetDataByProjectID(ctx context.Context, pid string) (string, error)
+	GetDataByProjectID(ctx context.Context, pid string) (*string, *time.Time, error)
+	UpdateProjectData(ctx context.Context, pid string, data string, t time.Time, expire time.Duration) error
 }
 
 type NotificationRepository interface {
@@ -35,4 +38,5 @@ type NotificationRepository interface {
 	Insert(ctx context.Context, n *Notification) error
 	Update(ctx context.Context, n *Notification) error
 	Delete(ctx context.Context, n *Notification) error
+	GetDataByPID(ctx context.Context, pid string) (*time.Time, *int32, *string, error)
 }

@@ -10,27 +10,34 @@ import (
 )
 
 type NotificationRedisCache struct {
-	rdb         *redis.Client
-	notifExpiry time.Duration
+	rdb *redis.Client
 }
 
-func (n *NotificationRedisCache) GetTimeByProjectID(ctx context.Context, pid string) (time.Time, error) {
-	t, err := n.rdb.GetEx(ctx, fmt.Sprintf("%s.time", pid), n.notifExpiry).Result()
+func (n *NotificationRedisCache) GetDataByProjectID(ctx context.Context, pid string) (*string, *time.Time, error) {
+	t, err := n.rdb.Get(ctx, fmt.Sprintf("%s.time", pid)).Result()
 	if err != nil {
-		return time.Unix(0, 0), err
+		return nil, nil, err
 	}
-	ret, err := time.Parse(time.RFC3339, t)
+	activeTime, err := time.Parse(time.RFC3339, t)
 	if err != nil {
-		return time.Unix(0, 0), err
+		return nil, nil, err
 	}
-	return ret, nil
+	data, err := n.rdb.Get(ctx, fmt.Sprintf("%s.data", pid)).Result()
+	if err != nil {
+		return nil, nil, err
+	}
+	return &data, &activeTime, nil
 }
 
-func (n *NotificationRedisCache) GetDataByProjectID(ctx context.Context, pid string) (string, error) {
-	return n.rdb.GetEx(ctx, fmt.Sprintf("%s.data", pid), n.notifExpiry).Result()
+func (n *NotificationRedisCache) UpdateProjectData(ctx context.Context, pid string, data string, t time.Time, expire time.Duration) error {
+	err := n.rdb.Set(ctx, fmt.Sprintf("%s.data", pid), data, expire).Err()
+	if err != nil {
+		return err
+	}
+	return n.rdb.Set(ctx, fmt.Sprintf("%s.time", pid), t, expire).Err()
 }
 
-func NewNotificationRedisCache(notifExpiry time.Duration) *NotificationRedisCache {
+func NewNotificationRedisCache() *NotificationRedisCache {
 	return &NotificationRedisCache{
 		rdb: redis.NewClient(&redis.Options{
 			Addr:            REDIS_ADDR,
@@ -44,6 +51,5 @@ func NewNotificationRedisCache(notifExpiry time.Duration) *NotificationRedisCach
 				return nil
 			},
 		}),
-		notifExpiry: notifExpiry,
 	}
 }

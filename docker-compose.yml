@@ -52,8 +52,6 @@ services:
       DATABASE_NAME: ${DATABASE_NAME}
     depends_on:
       - db
-      - redis
-      - api
     image: ${IMAGE_NAME_NOTIFICATION}
   nginx:
     restart: always

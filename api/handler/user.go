@@ -100,8 +100,7 @@ func (u *UserHandler) AdminUpdateUserHandler(w http.ResponseWriter, r *http.Requ
 	}
 	if projectQuota > 0 && projectQuota < user.NumProjects {
 		log.Println("Error: project quota cannot be less than user num projects.")
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprint(w, "Error: project quota cannot be less than user num projects.")
+		util.WriteError(w, http.StatusBadRequest, "Error: project quota cannot be less than user num projects.")
 		return
 	}
 	user.ProjectQuota = projectQuota

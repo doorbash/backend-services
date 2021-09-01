@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"github.com/doorbash/backend-services/api/domain"
 	"github.com/doorbash/backend-services/api/util"
 	"github.com/doorbash/backend-services/api/util/middleware"
+	"github.com/go-redis/redis/v8"
+	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
 
 	"github.com/gorilla/mux"
@@ -22,44 +25,63 @@ type NotificationHandler struct {
 }
 
 func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *http.Request) {
-	projectVar := mux.Vars(r)["id"]
+	pid := mux.Vars(r)["id"]
 	t := util.GetUrlQueryParam(r, "time")
-	var _time time.Time
-	if t == "" {
-		_time = time.Unix(0, 0)
-	} else {
+	var _time *time.Time
+	if t != "" {
 		var err error
-		_time, err = time.Parse(time.RFC3339, t)
+		parsedTime, err := time.Parse(time.RFC3339, t)
 		if err != nil {
 			log.Println(err)
-			util.WriteError(w, http.StatusBadRequest, "Bad time")
+			util.WriteError(w, http.StatusBadRequest, "bad time")
 			return
 		}
+		_time = &parsedTime
 	}
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	pt, err := n.noCache.GetTimeByProjectID(ctx, projectVar)
+	data, activeTime, err := n.noCache.GetDataByProjectID(ctx, pid)
 	if err != nil {
 		log.Println(err)
-		util.WriteStatus(w, http.StatusNotFound)
-		return
+		if err == redis.Nil {
+			ctx, cancel := util.GetContextWithTimeout(r.Context())
+			defer cancel()
+			_activeTime, _expire, _data, err := n.noRepo.GetDataByPID(ctx, pid)
+			if err != nil {
+				log.Println(err)
+				util.WriteInternalServerError(w)
+				return
+			}
+			data = _data
+			activeTime = _activeTime
+			ctx, cancel = util.GetContextWithTimeout(context.Background())
+			defer cancel()
+			if *_expire < 0 {
+				log.Println("expire < 0, expire:", _expire, "seconds")
+				util.WriteInternalServerError(w)
+				return
+			}
+			log.Println("UpdateProjectData():", "activeTime:", *activeTime, "expire:", *_expire)
+			err = n.noCache.UpdateProjectData(ctx, pid, *data, *activeTime, time.Duration(*_expire)*time.Second)
+			if err != nil {
+				log.Println(err)
+				util.WriteInternalServerError(w)
+				return
+			}
+		} else {
+			util.WriteStatus(w, http.StatusNotFound)
+			return
+		}
 	}
-	if _time.After(pt) {
-		log.Println("_time >= pt")
-		util.WriteStatus(w, http.StatusNotFound)
-		return
-	}
-	ctx, cancel = util.GetContextWithTimeout(r.Context())
-	defer cancel()
-	data, err := n.noCache.GetDataByProjectID(ctx, projectVar)
-	if err != nil {
-		log.Println(err)
+	log.Println("_time:", _time, "activeTime:", *activeTime)
+	if _time != nil && !activeTime.Before(*_time) {
+		log.Println("_time != nil && !activeTime.Before(*_time)")
 		util.WriteStatus(w, http.StatusNotFound)
 		return
 	}
 	ret := make(map[string]interface{})
-	ret["time"] = time.Now() // pt
-	ret["notifications"] = json.RawMessage(data)
+	ret["time"] = activeTime
+	ret["notifications"] = json.RawMessage(*data)
 	util.WriteJson(w, ret)
 }
 
@@ -114,6 +136,44 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		return
 	}
 
+	when, ok := body["when"].(string)
+	if !ok {
+		when = "now"
+	}
+
+	var scheduleTime time.Time
+	var expire int
+
+	switch when {
+	case "later":
+		st, ok := body["schedule_time"].(string)
+		if !ok {
+			util.WriteError(w, http.StatusBadRequest, "no schedule_time")
+			return
+		}
+		var err error
+		scheduleTime, err = time.Parse(time.RFC3339, st)
+		if err != nil || scheduleTime.Before(time.Now().Add(10*time.Minute)) {
+			util.WriteError(w, http.StatusBadRequest, "bad schedule_time")
+			return
+		}
+		fallthrough
+	case "now":
+		ex, ok := body["expire"].(float64)
+		if !ok {
+			util.WriteError(w, http.StatusBadRequest, "no expire")
+			return
+		}
+		expire = int(ex)
+		if expire <= 0 {
+			util.WriteError(w, http.StatusBadRequest, "bad expire")
+			return
+		}
+	default:
+		util.WriteError(w, http.StatusBadRequest, "bad when")
+		return
+	}
+
 	title, ok := body["title"].(string)
 	if !ok {
 		util.WriteError(w, http.StatusBadRequest, "no title")
@@ -141,16 +201,43 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		util.WriteStatus(w, http.StatusForbidden)
 		return
 	}
+
 	now := time.Now()
 	no := &domain.Notification{
-		PID:       project.ID,
-		Status:    domain.NOTIFICATION_STATUS_ACTIVE,
-		Title:     title,
-		Text:      text,
-		CreatedAt: now,
-		ActivedAt: now,
-		ExpiresAt: now.Add(24 * time.Hour),
+		PID:   project.ID,
+		Title: title,
+		Text:  text,
+		CreateTime: pgtype.Timestamptz{
+			Time:   now,
+			Status: pgtype.Present,
+		},
 	}
+
+	switch when {
+	case "now":
+		no.Status = domain.NOTIFICATION_STATUS_ACTIVE
+		no.ActiveTime = pgtype.Timestamptz{
+			Time:   now,
+			Status: pgtype.Present,
+		}
+		no.ExpireTime = pgtype.Timestamptz{
+			Time:   now.Add(time.Duration(expire) * time.Hour),
+			Status: pgtype.Present,
+		}
+		no.ScheduleTime.Status = pgtype.Null
+	case "later":
+		no.Status = domain.NOTIFICATION_STATUS_SCHEDULED
+		no.ScheduleTime = pgtype.Timestamptz{
+			Time:   scheduleTime,
+			Status: pgtype.Present,
+		}
+		no.ExpireTime = pgtype.Timestamptz{
+			Time:   scheduleTime.Add(time.Duration(expire) * time.Hour),
+			Status: pgtype.Present,
+		}
+		no.ActiveTime.Status = pgtype.Null
+	}
+
 	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	err = n.noRepo.Insert(ctx, no)
