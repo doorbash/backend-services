@@ -100,6 +100,10 @@ func (pr *ProjectHandler) CreateProjectHandler(w http.ResponseWriter, r *http.Re
 		}
 		return
 	}
+	if user.ProjectQuota != 0 && user.NumProjects >= user.ProjectQuota {
+		util.WriteError(w, http.StatusForbidden, "Sorry, your quota has been exceeded.")
+		return
+	}
 	project := &domain.Project{
 		ID:     id,
 		UserID: user.ID,
