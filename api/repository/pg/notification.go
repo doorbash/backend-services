@@ -127,9 +127,10 @@ func (n *NotificationPostgresRepository) GetDataByPID(ctx context.Context, pid s
 	SELECT
 		MAX(active_time) AS active_time,
 		EXTRACT(EPOCH FROM LEAST(MIN(expire_time), (select schedule_min from schedules)) - CURRENT_TIMESTAMP)::int AS expire,
-		'[' || STRING_AGG('{"id":' || id || ',"active_time":"' || active_time || '","title":"' || title || '","text":"' || text || '"}', ',') || ']' AS data
+		'[' || STRING_AGG('{"id":' || id || ',"active_time":' || to_json(active_time) || ',"title":"' || title || '","text":"' || text || '"}', ',') || ']' AS data
 		FROM notifications
-		WHERE pid = $1 AND status = 1`, pid)
+		WHERE pid = $1 AND status = 1
+		ORDER BY active_time ASC`, pid)
 	var activeTime pgtype.Timestamptz
 	var expire pgtype.Int4
 	var data pgtype.Text

@@ -74,14 +74,13 @@ func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *
 			return
 		}
 	}
-	log.Println("_time:", _time, "activeTime:", *activeTime)
-	if _time != nil && !activeTime.Before(*_time) {
-		log.Println("_time != nil && !activeTime.Before(*_time)")
+	// log.Println("_time:", _time, "activeTime:", *activeTime)
+	if _time != nil && !_time.Before(*activeTime) {
 		util.WriteStatus(w, http.StatusNotFound)
 		return
 	}
 	ret := make(map[string]interface{})
-	ret["time"] = activeTime
+	ret["time"] = time.Now().Format(time.RFC3339)
 	ret["notifications"] = json.RawMessage(*data)
 	util.WriteJson(w, ret)
 }
