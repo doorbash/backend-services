@@ -1,5 +1,7 @@
 # backend-services
-Common backend service APIs for Android apps (remote config, pull based notification) 
+Common backend service APIs for Android apps:
+- Remote config
+- Pull based notification 
 
 ## Prerequisites
 - Go
