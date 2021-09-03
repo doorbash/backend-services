@@ -1,5 +1,5 @@
 # backend-services
-[UNDER DEVELOPMENT] A couple of backend service APIs for Android apps (remote config, push, ads) 
+Common backend service APIs for Android apps (remote config, pull based notification) 
 
 ## Prerequisites
 - Go
@@ -64,6 +64,5 @@ https://documenter.getpostman.com/view/13117984/TzzGGtSs
 
 ## Todo
 - Android client
-- Push notification (FCM, Pull based)
 - Ads
-- Web panel (help needed!)
+- Web panel
