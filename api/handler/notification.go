@@ -12,7 +12,6 @@ import (
 	"github.com/doorbash/backend-services/api/util"
 	"github.com/doorbash/backend-services/api/util/middleware"
 	"github.com/go-redis/redis/v8"
-	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
 
 	"github.com/gorilla/mux"
@@ -218,38 +217,21 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 
 	now := time.Now()
 	no := &domain.Notification{
-		PID:   project.ID,
-		Title: title,
-		Text:  text,
-		CreateTime: pgtype.Timestamptz{
-			Time:   now,
-			Status: pgtype.Present,
-		},
+		PID:        project.ID,
+		Title:      title,
+		Text:       text,
+		CreateTime: &now,
 	}
 
 	switch when {
 	case "now":
 		no.Status = domain.NOTIFICATION_STATUS_ACTIVE
-		no.ActiveTime = pgtype.Timestamptz{
-			Time:   now,
-			Status: pgtype.Present,
-		}
-		no.ExpireTime = pgtype.Timestamptz{
-			Time:   expireTime,
-			Status: pgtype.Present,
-		}
-		no.ScheduleTime.Status = pgtype.Null
+		no.ActiveTime = &now
+		no.ExpireTime = &expireTime
 	case "later":
 		no.Status = domain.NOTIFICATION_STATUS_SCHEDULED
-		no.ScheduleTime = pgtype.Timestamptz{
-			Time:   scheduleTime,
-			Status: pgtype.Present,
-		}
-		no.ExpireTime = pgtype.Timestamptz{
-			Time:   expireTime,
-			Status: pgtype.Present,
-		}
-		no.ActiveTime.Status = pgtype.Null
+		no.ScheduleTime = &scheduleTime
+		no.ExpireTime = &expireTime
 	}
 
 	ctx, cancel = util.GetContextWithTimeout(r.Context())
@@ -337,8 +319,7 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad schedule_time: %s", st))
 			return
 		}
-		no.ScheduleTime.Time = scheduleTime
-		no.ScheduleTime.Status = pgtype.Present
+		no.ScheduleTime = &scheduleTime
 	}
 
 	var expireTime time.Time
@@ -353,8 +334,7 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("expire_time (%s) < schedule_time + 5min (%s)", et, scheduleTime.Add(5*time.Minute)))
 			return
 		}
-		no.ExpireTime.Time = expireTime
-		no.ExpireTime.Status = pgtype.Present
+		no.ExpireTime = &expireTime
 	}
 
 	ctx, cancel = util.GetContextWithTimeout(r.Context())

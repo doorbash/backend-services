@@ -3,8 +3,6 @@ package domain
 import (
 	"context"
 	"time"
-
-	"github.com/jackc/pgtype"
 )
 
 const (
@@ -16,15 +14,15 @@ const (
 )
 
 type Notification struct {
-	ID           int                `json:"id"`
-	PID          string             `json:"pid"`
-	Status       int                `json:"status"`
-	Title        string             `json:"title"`
-	Text         string             `json:"text"`
-	CreateTime   pgtype.Timestamptz `json:"create_time"`
-	ActiveTime   pgtype.Timestamptz `json:"active_time"`
-	ExpireTime   pgtype.Timestamptz `json:"expire_time"`
-	ScheduleTime pgtype.Timestamptz `json:"schedule_time"`
+	ID           int        `json:"id"`
+	PID          string     `json:"pid"`
+	Status       int        `json:"status"`
+	Title        string     `json:"title"`
+	Text         string     `json:"text"`
+	CreateTime   *time.Time `json:"create_time"`
+	ActiveTime   *time.Time `json:"active_time"`
+	ExpireTime   *time.Time `json:"expire_time"`
+	ScheduleTime *time.Time `json:"schedule_time"`
 }
 
 type NotificationCache interface {
