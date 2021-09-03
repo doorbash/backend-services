@@ -173,20 +173,19 @@ func (u *UserHandler) AdminAddUserHandler(w http.ResponseWriter, r *http.Request
 	util.WriteJson(w, id)
 }
 
-func NewUserHandler(r *mux.Router, authMiddleware mux.MiddlewareFunc, repo domain.UserRepository, prefix string) *UserHandler {
-	rc := &UserHandler{
+func NewUserHandler(r *mux.Router, authMiddleware mux.MiddlewareFunc, repo domain.UserRepository) *UserHandler {
+	u := &UserHandler{
 		repo:   repo,
-		router: r,
+		router: r.PathPrefix("/users").Subrouter(),
 	}
 
-	rc.router = r.PathPrefix(prefix).Subrouter()
-	rc.router.Use(authMiddleware)
-	rc.router.HandleFunc("/profile", rc.UserProfileHandler).Methods("GET")
-	rc.router.HandleFunc("/role", rc.UserRoleHandler).Methods("GET")
+	u.router.Use(authMiddleware)
+	u.router.HandleFunc("/profile", u.UserProfileHandler).Methods("GET")
+	u.router.HandleFunc("/role", u.UserRoleHandler).Methods("GET")
 
-	subrouter := rc.router.NewRoute().Subrouter()
+	subrouter := u.router.NewRoute().Subrouter()
 	subrouter.Use(middleware.JsonBodyMiddleware)
-	subrouter.HandleFunc("/update", rc.AdminUpdateUserHandler).Methods("POST")
-	subrouter.HandleFunc("/new", rc.AdminAddUserHandler).Methods("POST")
-	return rc
+	subrouter.HandleFunc("/update", u.AdminUpdateUserHandler).Methods("POST")
+	subrouter.HandleFunc("/new", u.AdminAddUserHandler).Methods("POST")
+	return u
 }

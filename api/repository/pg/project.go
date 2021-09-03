@@ -31,7 +31,7 @@ func (rc *ProjectPostgresRepository) GetByID(ctx context.Context, id string) (*d
 }
 
 func (rc *ProjectPostgresRepository) GetProjectsByUserID(ctx context.Context, uid int) ([]domain.Project, error) {
-	rows, err := rc.pool.Query(ctx, "SELECT id, uid, name FROM projects WHERE uid = $1", uid)
+	rows, err := rc.pool.Query(ctx, "SELECT id, uid, name FROM projects WHERE uid = $1 ORDER BY id ASC", uid)
 	if err != nil {
 		return nil, err
 	}

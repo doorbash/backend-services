@@ -30,10 +30,12 @@ type Notification struct {
 type NotificationCache interface {
 	GetDataByProjectID(ctx context.Context, pid string) (*string, *time.Time, error)
 	UpdateProjectData(ctx context.Context, pid string, data string, t time.Time, expire time.Duration) error
+	DeleteProjectData(ctx context.Context, pid string) error
+	SetProjectDataExpire(ctx context.Context, pid string, expiration time.Duration) error
 }
 
 type NotificationRepository interface {
-	GetByID(ctx context.Context, id string) (*Notification, error)
+	GetByID(ctx context.Context, id int) (*Notification, error)
 	GetByPID(ctx context.Context, pid string) ([]Notification, error)
 	Insert(ctx context.Context, n *Notification) error
 	Update(ctx context.Context, n *Notification) error

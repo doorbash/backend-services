@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -49,7 +50,7 @@ func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *
 			_activeTime, _expire, _data, err := n.noRepo.GetDataByPID(ctx, pid)
 			if err != nil {
 				log.Println(err)
-				util.WriteInternalServerError(w)
+				util.WriteStatus(w, http.StatusNotFound)
 				return
 			}
 			data = _data
@@ -58,14 +59,14 @@ func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *
 			defer cancel()
 			if *_expire < 0 {
 				log.Println("expire < 0, expire:", _expire, "seconds")
-				util.WriteInternalServerError(w)
+				util.WriteStatus(w, http.StatusNotFound)
 				return
 			}
 			log.Println("UpdateProjectData():", "activeTime:", *activeTime, "expire:", *_expire)
 			err = n.noCache.UpdateProjectData(ctx, pid, *data, *activeTime, time.Duration(*_expire)*time.Second)
 			if err != nil {
 				log.Println(err)
-				util.WriteInternalServerError(w)
+				util.WriteStatus(w, http.StatusNotFound)
 				return
 			}
 		} else {
@@ -87,7 +88,7 @@ func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *
 
 func (n *NotificationHandler) GetAllNotificationsHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
-	projectVar, ok := mux.Vars(r)["id"]
+	pid, ok := mux.Vars(r)["id"]
 	if !ok {
 		log.Println("no id")
 		util.WriteInternalServerError(w)
@@ -95,7 +96,7 @@ func (n *NotificationHandler) GetAllNotificationsHandler(w http.ResponseWriter, 
 	}
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	project, err := n.prRepo.GetByID(ctx, projectVar)
+	project, err := n.prRepo.GetByID(ctx, pid)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			util.WriteError(w, http.StatusNotFound, "project not found.")
@@ -142,7 +143,7 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 	}
 
 	var scheduleTime time.Time
-	var expire int
+	var expireTime time.Time
 
 	switch when {
 	case "later":
@@ -153,24 +154,38 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		}
 		var err error
 		scheduleTime, err = time.Parse(time.RFC3339, st)
-		if err != nil || scheduleTime.Before(time.Now().Add(10*time.Minute)) {
-			util.WriteError(w, http.StatusBadRequest, "bad schedule_time")
+		if err != nil {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad schedule_time: %s", st))
+			return
+		}
+		if scheduleTime.Before(time.Now().Add(5 * time.Minute)) {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("schedule_time: %s must be after %s", st, time.Now().Add(5*time.Minute).Format(time.RFC3339)))
 			return
 		}
 		fallthrough
 	case "now":
-		ex, ok := body["expire"].(float64)
+		et, ok := body["expire_time"].(string)
 		if !ok {
-			util.WriteError(w, http.StatusBadRequest, "no expire")
+			util.WriteError(w, http.StatusBadRequest, "no expire_time")
 			return
 		}
-		expire = int(ex)
-		if expire <= 0 {
-			util.WriteError(w, http.StatusBadRequest, "bad expire")
+		var err error
+		expireTime, err = time.Parse(time.RFC3339, et)
+		if err != nil {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad expire_time: %s", et))
+			return
+		}
+		if expireTime.Before(time.Now().Add(5 * time.Minute)) {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("expire_time: %s must be after %s", et, time.Now().Add(5*time.Minute).Format(time.RFC3339)))
 			return
 		}
 	default:
 		util.WriteError(w, http.StatusBadRequest, "bad when")
+		return
+	}
+
+	if when == "later" && expireTime.Before(scheduleTime) {
+		util.WriteError(w, http.StatusBadRequest, "bad expire time")
 		return
 	}
 
@@ -221,7 +236,7 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 			Status: pgtype.Present,
 		}
 		no.ExpireTime = pgtype.Timestamptz{
-			Time:   now.Add(time.Duration(expire) * time.Hour),
+			Time:   expireTime,
 			Status: pgtype.Present,
 		}
 		no.ScheduleTime.Status = pgtype.Null
@@ -232,7 +247,7 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 			Status: pgtype.Present,
 		}
 		no.ExpireTime = pgtype.Timestamptz{
-			Time:   scheduleTime.Add(time.Duration(expire) * time.Hour),
+			Time:   expireTime,
 			Status: pgtype.Present,
 		}
 		no.ActiveTime.Status = pgtype.Null
@@ -247,6 +262,185 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		return
 	}
 
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
+	defer cancel()
+	err = n.noCache.SetProjectDataExpire(ctx, project.ID, 30*time.Second)
+	if err != nil {
+		log.Println(err)
+		util.WriteInternalServerError(w)
+		return
+	}
+
+	util.WriteJson(w, no)
+}
+
+func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r *http.Request) {
+	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonbody := r.Context().Value("json")
+
+	body, ok := jsonbody.(map[string]interface{})
+	if !ok {
+		util.WriteStatus(w, http.StatusBadRequest)
+		return
+	}
+
+	_id, _ := body["id"].(float64)
+	title, _ := body["title"].(string)
+	text, _ := body["text"].(string)
+	st, _ := body["schedule_time"].(string)
+	et, _ := body["expire_time"].(string)
+
+	ctx, cancel := util.GetContextWithTimeout(r.Context())
+	defer cancel()
+	no, err := n.noRepo.GetByID(ctx, int(_id))
+
+	if err != nil {
+		util.WriteStatus(w, http.StatusNotFound)
+		return
+	}
+
+	if no.Status != domain.NOTIFICATION_STATUS_ACTIVE && no.Status != domain.NOTIFICATION_STATUS_SCHEDULED {
+		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("notification status must be active or scheduled. status: %d", no.Status))
+		return
+	}
+
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
+	defer cancel()
+	project, err := n.prRepo.GetByID(ctx, no.PID)
+
+	if err != nil {
+		util.WriteError(w, http.StatusNotFound, "no project found")
+		return
+	}
+
+	if project.UserID != authUser.ID {
+		util.WriteStatus(w, http.StatusForbidden)
+		return
+	}
+
+	if title != "" {
+		no.Title = title
+	}
+
+	if text != "" {
+		no.Text = text
+	}
+
+	var scheduleTime time.Time
+	if st != "" {
+		if no.Status != domain.NOTIFICATION_STATUS_SCHEDULED {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("notification is not scheduled. status:%d", no.Status))
+			return
+		}
+		var err error
+		scheduleTime, err = time.Parse(time.RFC3339, st)
+		if err != nil || scheduleTime.Before(time.Now().Add(5*time.Minute)) {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad schedule_time: %s", st))
+			return
+		}
+		no.ScheduleTime.Time = scheduleTime
+		no.ScheduleTime.Status = pgtype.Present
+	}
+
+	var expireTime time.Time
+	if et != "" {
+		var err error
+		expireTime, err = time.Parse(time.RFC3339, et)
+		if err != nil || expireTime.Before(time.Now().Add(5*time.Minute)) {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad expire_time: %s", et))
+			return
+		}
+		if no.Status == domain.NOTIFICATION_STATUS_SCHEDULED && expireTime.Before(scheduleTime.Add(5*time.Minute)) {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("expire_time (%s) < schedule_time + 5min (%s)", et, scheduleTime.Add(5*time.Minute)))
+			return
+		}
+		no.ExpireTime.Time = expireTime
+		no.ExpireTime.Status = pgtype.Present
+	}
+
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
+	defer cancel()
+	err = n.noRepo.Update(ctx, no)
+
+	if err != nil {
+		log.Println(err)
+		util.WriteStatus(w, http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
+	defer cancel()
+	err = n.noCache.SetProjectDataExpire(ctx, project.ID, 30*time.Second)
+	if err != nil {
+		log.Println(err)
+		util.WriteInternalServerError(w)
+		return
+	}
+
+	util.WriteJson(w, no)
+}
+
+func (n *NotificationHandler) CancelNotificationHandler(w http.ResponseWriter, r *http.Request) {
+	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonbody := r.Context().Value("json")
+
+	body, ok := jsonbody.(map[string]interface{})
+	if !ok {
+		util.WriteStatus(w, http.StatusBadRequest)
+		return
+	}
+
+	_id, _ := body["id"].(float64)
+
+	ctx, cancel := util.GetContextWithTimeout(r.Context())
+	defer cancel()
+	no, err := n.noRepo.GetByID(ctx, int(_id))
+
+	if err != nil {
+		util.WriteStatus(w, http.StatusNotFound)
+		return
+	}
+
+	if no.Status != domain.NOTIFICATION_STATUS_ACTIVE && no.Status != domain.NOTIFICATION_STATUS_SCHEDULED {
+		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("notification status must be active or scheduled. status: %d", no.Status))
+		return
+	}
+
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
+	defer cancel()
+	project, err := n.prRepo.GetByID(ctx, no.PID)
+
+	if err != nil {
+		util.WriteError(w, http.StatusNotFound, "no project found")
+		return
+	}
+
+	if project.UserID != authUser.ID {
+		util.WriteStatus(w, http.StatusForbidden)
+		return
+	}
+
+	no.Status = domain.NOTIFICATION_STATUS_CANCELED
+
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
+	defer cancel()
+	err = n.noRepo.Update(ctx, no)
+
+	if err != nil {
+		log.Println(err)
+		util.WriteStatus(w, http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
+	defer cancel()
+	err = n.noCache.SetProjectDataExpire(ctx, project.ID, 30*time.Second)
+	if err != nil {
+		log.Println(err)
+		util.WriteInternalServerError(w)
+		return
+	}
+
 	util.WriteJson(w, no)
 }
 
@@ -256,7 +450,6 @@ func NewNotificationHandler(
 	noRepo domain.NotificationRepository,
 	prRepo domain.ProjectRepository,
 	noCache domain.NotificationCache,
-	prefix string,
 ) *NotificationHandler {
 	n := &NotificationHandler{
 		noCache: noCache,
@@ -265,16 +458,17 @@ func NewNotificationHandler(
 		router:  r,
 	}
 
-	n.router = r.PathPrefix(prefix).Subrouter()
-	n.router.HandleFunc("/{id}/", n.GetNotificationsHandler).Methods("GET")
+	n.router.HandleFunc("/{id}/notifications", n.GetNotificationsHandler).Methods("GET")
 
 	authRouter := n.router.NewRoute().Subrouter()
 	authRouter.Use(authMiddleware)
-	authRouter.HandleFunc("/{id}/all", n.GetAllNotificationsHandler).Methods("GET")
+	authRouter.HandleFunc("/{id}/notifications/all", n.GetAllNotificationsHandler).Methods("GET")
 
 	jsonRouter := authRouter.NewRoute().Subrouter()
 	jsonRouter.Use(middleware.JsonBodyMiddleware)
-	jsonRouter.HandleFunc("/{id}/new", n.NewNotificationHandler).Methods("POST")
+	jsonRouter.HandleFunc("/{id}/notifications/new", n.NewNotificationHandler).Methods("POST")
+	jsonRouter.HandleFunc("/notifications/update", n.UpdateNotificationHandler).Methods("POST")
+	jsonRouter.HandleFunc("/notifications/cancel", n.CancelNotificationHandler).Methods("POST")
 
 	return n
 }

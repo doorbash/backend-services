@@ -87,24 +87,23 @@ func main() {
 		"/oauth2",
 	)
 
-	handler.NewUserHandler(r, authHandler.Middleware, userRepo, "/users")
+	handler.NewUserHandler(r, authHandler.Middleware, userRepo)
 
 	handler.NewRemoteConfigHandler(
 		r,
 		authHandler.Middleware,
 		rcRepo,
 		projectRepo,
-		_redis.NewRemoteConfigRedisCache(24*time.Hour), "/rc")
-
-	handler.NewProjectHandler(r, authHandler.Middleware, projectRepo, userRepo, "/projects")
+		_redis.NewRemoteConfigRedisCache(24*time.Hour))
 
 	handler.NewNotificationHandler(
 		r,
 		authHandler.Middleware,
 		noRepo, projectRepo,
 		_redis.NewNotificationRedisCache(),
-		"/notifications",
 	)
+
+	handler.NewProjectHandler(r, authHandler.Middleware, projectRepo, userRepo)
 
 	http.Handle("/", r)
 	log.Fatal(http.ListenAndServe(os.Getenv("API_LISTEN_ADDR"), r))

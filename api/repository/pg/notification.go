@@ -30,7 +30,7 @@ func CreateNotificationsTable() (query string) {
 );`
 }
 
-func (n *NotificationPostgresRepository) GetByID(ctx context.Context, id string) (*domain.Notification, error) {
+func (n *NotificationPostgresRepository) GetByID(ctx context.Context, id int) (*domain.Notification, error) {
 	row := n.pool.QueryRow(ctx, "SELECT id, pid, status, title, text, create_time, active_time, expire_time, schedule_time FROM notifications WHERE id = $1", id)
 	notification := &domain.Notification{}
 	if err := row.Scan(
@@ -50,7 +50,7 @@ func (n *NotificationPostgresRepository) GetByID(ctx context.Context, id string)
 }
 
 func (n *NotificationPostgresRepository) GetByPID(ctx context.Context, pid string) ([]domain.Notification, error) {
-	rows, err := n.pool.Query(ctx, "SELECT id, pid, status, title, text, create_time, active_time, expire_time, schedule_time FROM notifications WHERE pid = $1", pid)
+	rows, err := n.pool.Query(ctx, "SELECT id, pid, status, title, text, create_time, active_time, expire_time, schedule_time FROM notifications WHERE pid = $1 ORDER BY create_time ASC", pid)
 	if err != nil {
 		return nil, err
 	}

@@ -22,7 +22,7 @@ type RemoteConfigHandler struct {
 }
 
 func (rc *RemoteConfigHandler) GetDataHandler(w http.ResponseWriter, r *http.Request) {
-	projectVar, ok := mux.Vars(r)["id"]
+	pid, ok := mux.Vars(r)["id"]
 	if !ok {
 		util.WriteInternalServerError(w)
 		return
@@ -30,14 +30,14 @@ func (rc *RemoteConfigHandler) GetDataHandler(w http.ResponseWriter, r *http.Req
 	var remoteConfig *domain.RemoteConfig
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	data, err := rc.rcCache.GetDataByProjectID(ctx, projectVar)
+	data, err := rc.rcCache.GetDataByProjectID(ctx, pid)
 	if err != nil {
 		log.Println(err)
 		if err == redis.Nil {
 			// nothing in cache. get data from db then save to cache
 			ctx, cancel = util.GetContextWithTimeout(r.Context())
 			defer cancel()
-			remoteConfig, err = rc.rcRepo.GetByProjectID(ctx, projectVar)
+			remoteConfig, err = rc.rcRepo.GetByProjectID(ctx, pid)
 			if err != nil {
 				if err == pgx.ErrNoRows {
 					util.WriteStatus(w, http.StatusNotFound)
@@ -67,15 +67,16 @@ func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
 	jsonBody := r.Context().Value("json")
 
-	projectVar, ok := mux.Vars(r)["id"]
+	pid, ok := mux.Vars(r)["id"]
 	if !ok {
 		log.Println("no id")
 		util.WriteInternalServerError(w)
 		return
 	}
+
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	project, err := rc.prRepo.GetByID(ctx, projectVar)
+	project, err := rc.prRepo.GetByID(ctx, pid)
 	if err != nil {
 		log.Println(err)
 		if err == pgx.ErrNoRows {
@@ -97,6 +98,7 @@ func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.
 		util.WriteInternalServerError(w)
 		return
 	}
+
 	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	remoteConfig, err := rc.rcRepo.GetByProjectID(ctx, project.ID)
@@ -133,7 +135,6 @@ func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.
 	}
 	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	// update cache
 	err = rc.rcCache.Update(ctx, remoteConfig)
 	if err != nil {
 		log.Println(err)
@@ -149,21 +150,17 @@ func NewRemoteConfigHandler(
 	rcRepo domain.RemoteConfigRepository,
 	prRepo domain.ProjectRepository,
 	rcCache domain.RemoteConfigCache,
-	prefix string,
 ) *RemoteConfigHandler {
-
 	rc := &RemoteConfigHandler{
 		rcCache: rcCache,
 		rcRepo:  rcRepo,
 		prRepo:  prRepo,
 		router:  r,
 	}
-
-	rc.router = r.PathPrefix(prefix).Subrouter()
-	rc.router.HandleFunc("/{id}/", rc.GetDataHandler).Methods("GET")
+	rc.router.HandleFunc("/{id}/rc", rc.GetDataHandler).Methods("GET")
 
 	subrouter := rc.router.NewRoute().Subrouter()
 	subrouter.Use(authMiddleware, middleware.JsonBodyMiddleware)
-	subrouter.HandleFunc("/{id}/", rc.UpdateDataHandler).Methods("POST")
+	subrouter.HandleFunc("/{id}/rc", rc.UpdateDataHandler).Methods("POST")
 	return rc
 }
