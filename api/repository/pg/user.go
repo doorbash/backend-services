@@ -30,11 +30,14 @@ func (u *UserPostgresRepository) GetByEmail(ctx context.Context, email string) (
 	return &User, nil
 }
 
-func (u *UserPostgresRepository) Insert(ctx context.Context, user *domain.User) (int, error) {
-	row := u.pool.QueryRow(ctx, "INSERT INTO users(email, project_quota) VALUES($1, $2) RETURNING id", user.Email, user.ProjectQuota)
-	var id int
-	err := row.Scan(&id)
-	return id, err
+func (u *UserPostgresRepository) Insert(ctx context.Context, user *domain.User) error {
+	row := u.pool.QueryRow(ctx, "INSERT INTO users(email, project_quota) VALUES($1, $2) RETURNING id, email, project_quota, num_projects", user.Email, user.ProjectQuota)
+	return row.Scan(
+		&user.ID,
+		&user.Email,
+		&user.ProjectQuota,
+		&user.NumProjects,
+	)
 }
 
 func (u *UserPostgresRepository) Update(ctx context.Context, user *domain.User) error {

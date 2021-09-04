@@ -160,7 +160,7 @@ func (u *UserHandler) AdminAddUserHandler(w http.ResponseWriter, r *http.Request
 	}
 	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	id, err := u.repo.Insert(ctx, user)
+	err = u.repo.Insert(ctx, user)
 	if err != nil {
 		log.Println(err)
 		if strings.HasPrefix(err.Error(), "ERROR: duplicate key") {
@@ -170,7 +170,7 @@ func (u *UserHandler) AdminAddUserHandler(w http.ResponseWriter, r *http.Request
 		}
 		return
 	}
-	util.WriteJson(w, id)
+	util.WriteJson(w, user)
 }
 
 func NewUserHandler(r *mux.Router, authMiddleware mux.MiddlewareFunc, repo domain.UserRepository) *UserHandler {

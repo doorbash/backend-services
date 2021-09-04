@@ -98,7 +98,6 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	email := *githubUser.Email
-	var id int
 
 	ctx, cancel = util.GetContextWithTimeout(context.Background())
 	defer cancel()
@@ -114,7 +113,8 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 			}
 			ctx, cancel = util.GetContextWithTimeout(context.Background())
 			defer cancel()
-			id, err = o.userRepo.Insert(ctx, &domain.User{Email: email, ProjectQuota: 0})
+			user = &domain.User{Email: email, ProjectQuota: 0}
+			err = o.userRepo.Insert(ctx, user)
 			if err != nil {
 				log.Println(err)
 				util.WriteInternalServerError(w)
@@ -125,12 +125,10 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 			util.WriteInternalServerError(w)
 			return
 		}
-	} else {
-		id = user.ID
 	}
 
-	session.Values["email"] = email
-	session.Values["id"] = id
+	session.Values["email"] = user.Email
+	session.Values["id"] = user.ID
 	err = sessions.Save(r, w)
 
 	if err != nil {
