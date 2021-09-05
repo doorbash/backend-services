@@ -12,10 +12,6 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-const (
-	DATA_EXPIRE = 5 * time.Minute
-)
-
 func UpdateNotifications(pool *pgxpool.Pool) error {
 	now := time.Now()
 
