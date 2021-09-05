@@ -51,8 +51,9 @@ PGADMIN_DEFAULT_PASSWORD="PUT_PG_ADMIN_PASSWORD_HERE"
 
 IMAGE_NAME_POSTGRES="postgres:14beta3-alpine3.14"
 IMAGE_NAME_PGADMIN="dpage/pgadmin4:5.6"
-IMAGE_NAME_API="backend-services/api"
 IMAGE_NAME_NGINX="nginx:1.21.1-alpine"
+IMAGE_NAME_REDIS="redis:6.2.5-alpine3.14"
+IMAGE_NAME_API="backend-services/api"
 IMAGE_NAME_NOTIFICATION="backend-services/notification"
 ```
 
