@@ -40,7 +40,7 @@ func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *
 	}
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	data, activeTime, err := n.noCache.GetDataByProjectID(ctx, pid)
+	activeTime, err := n.noCache.GetTimeByProjectID(ctx, pid)
 	if err != nil {
 		log.Println(err)
 		if err == redis.Nil {
@@ -52,7 +52,6 @@ func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *
 				util.WriteStatus(w, http.StatusNotFound)
 				return
 			}
-			data = _data
 			activeTime = _activeTime
 			ctx, cancel = util.GetContextWithTimeout(context.Background())
 			defer cancel()
@@ -62,20 +61,31 @@ func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *
 				return
 			}
 			log.Println("UpdateProjectData():", "activeTime:", *activeTime, "expire:", *_expire)
-			err = n.noCache.UpdateProjectData(ctx, pid, *data, *activeTime, time.Duration(*_expire)*time.Second)
+			err = n.noCache.UpdateProjectData(ctx, pid, *_data, *activeTime, time.Duration(*_expire)*time.Second)
 			if err != nil {
 				log.Println(err)
 				util.WriteStatus(w, http.StatusNotFound)
 				return
 			}
+			ret := make(map[string]interface{})
+			ret["time"] = time.Now().Format(time.RFC3339)
+			ret["notifications"] = json.RawMessage(*_data)
+			util.WriteJson(w, ret)
 		} else {
 			util.WriteStatus(w, http.StatusNotFound)
-			return
 		}
+		return
 	}
-	// log.Println("_time:", _time, "activeTime:", *activeTime)
 	if _time != nil && !_time.Before(*activeTime) {
 		util.WriteStatus(w, http.StatusNotFound)
+		return
+	}
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
+	defer cancel()
+	data, err := n.noCache.GetDataByProjectID(ctx, pid)
+	if err != nil {
+		log.Println(err)
+		util.WriteInternalServerError(w)
 		return
 	}
 	ret := make(map[string]interface{})

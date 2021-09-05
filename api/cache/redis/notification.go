@@ -13,48 +13,43 @@ type NotificationRedisCache struct {
 	rdb *redis.Client
 }
 
-func (n *NotificationRedisCache) GetDataByProjectID(ctx context.Context, pid string) (*string, *time.Time, error) {
-	pipe := n.rdb.TxPipeline()
-
-	cmd1 := pipe.Get(ctx, fmt.Sprintf("%s.time", pid))
-	cmd2 := pipe.Get(ctx, fmt.Sprintf("%s.data", pid))
-
-	_, err := pipe.Exec(ctx)
-
+func (n *NotificationRedisCache) GetTimeByProjectID(ctx context.Context, pid string) (*time.Time, error) {
+	t, err := n.rdb.Get(ctx, fmt.Sprintf("%s.t", pid)).Result()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-
-	t, _ := cmd1.Result()
-	data, _ := cmd2.Result()
-
-	activeTime, err := time.Parse(time.RFC3339, t)
+	ret, err := time.Parse(time.RFC3339, t)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return &data, &activeTime, nil
+	return &ret, nil
+}
+
+func (n *NotificationRedisCache) GetDataByProjectID(ctx context.Context, pid string) (*string, error) {
+	data, err := n.rdb.Get(ctx, fmt.Sprintf("%s.d", pid)).Result()
+	return &data, err
 }
 
 func (n *NotificationRedisCache) UpdateProjectData(ctx context.Context, pid string, data string, t time.Time, expire time.Duration) error {
 	_, err := n.rdb.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-		if err := pipe.SetNX(ctx, fmt.Sprintf("%s.time", pid), t, expire).Err(); err != nil {
+		if err := pipe.SetNX(ctx, fmt.Sprintf("%s.t", pid), t, expire).Err(); err != nil {
 			return err
 		}
-		return pipe.SetNX(ctx, fmt.Sprintf("%s.data", pid), data, expire).Err()
+		return pipe.SetNX(ctx, fmt.Sprintf("%s.d", pid), data, expire).Err()
 	})
 	return err
 }
 
 func (n *NotificationRedisCache) DeleteProjectData(ctx context.Context, pid string) error {
-	return n.rdb.Del(ctx, fmt.Sprintf("%s.data", pid), fmt.Sprintf("%s.time", pid)).Err()
+	return n.rdb.Del(ctx, fmt.Sprintf("%s.d", pid), fmt.Sprintf("%s.t", pid)).Err()
 }
 
 func (n *NotificationRedisCache) SetProjectDataExpire(ctx context.Context, pid string, expiration time.Duration) error {
 	_, err := n.rdb.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-		if err := pipe.Expire(ctx, fmt.Sprintf("%s.data", pid), expiration).Err(); err != nil {
+		if err := pipe.Expire(ctx, fmt.Sprintf("%s.d", pid), expiration).Err(); err != nil {
 			return err
 		}
-		return pipe.Expire(ctx, fmt.Sprintf("%s.time", pid), expiration).Err()
+		return pipe.Expire(ctx, fmt.Sprintf("%s.t", pid), expiration).Err()
 	})
 	return err
 }

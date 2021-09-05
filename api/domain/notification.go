@@ -25,13 +25,6 @@ type Notification struct {
 	ScheduleTime *time.Time `json:"schedule_time"`
 }
 
-type NotificationCache interface {
-	GetDataByProjectID(ctx context.Context, pid string) (*string, *time.Time, error)
-	UpdateProjectData(ctx context.Context, pid string, data string, t time.Time, expire time.Duration) error
-	DeleteProjectData(ctx context.Context, pid string) error
-	SetProjectDataExpire(ctx context.Context, pid string, expiration time.Duration) error
-}
-
 type NotificationRepository interface {
 	GetByID(ctx context.Context, id int) (*Notification, error)
 	GetByPID(ctx context.Context, pid string) ([]Notification, error)
@@ -39,4 +32,12 @@ type NotificationRepository interface {
 	Update(ctx context.Context, n *Notification) error
 	Delete(ctx context.Context, n *Notification) error
 	GetDataByPID(ctx context.Context, pid string) (*time.Time, *int32, *string, error)
+}
+
+type NotificationCache interface {
+	GetTimeByProjectID(ctx context.Context, pid string) (*time.Time, error)
+	GetDataByProjectID(ctx context.Context, pid string) (*string, error)
+	UpdateProjectData(ctx context.Context, pid string, data string, t time.Time, expire time.Duration) error
+	DeleteProjectData(ctx context.Context, pid string) error
+	SetProjectDataExpire(ctx context.Context, pid string, expiration time.Duration) error
 }

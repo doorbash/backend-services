@@ -2,8 +2,10 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/doorbash/backend-services/api/domain"
 	"github.com/doorbash/backend-services/api/util"
@@ -27,17 +29,16 @@ func (rc *RemoteConfigHandler) GetDataHandler(w http.ResponseWriter, r *http.Req
 		util.WriteInternalServerError(w)
 		return
 	}
-	var remoteConfig *domain.RemoteConfig
+	version := util.GetUrlQueryParam(r, "version")
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	data, err := rc.rcCache.GetDataByProjectID(ctx, pid)
+	v, err := rc.rcCache.GetVersionByProjectID(ctx, pid)
 	if err != nil {
 		log.Println(err)
 		if err == redis.Nil {
-			// nothing in cache. get data from db then save to cache
 			ctx, cancel = util.GetContextWithTimeout(r.Context())
 			defer cancel()
-			remoteConfig, err = rc.rcRepo.GetByProjectID(ctx, pid)
+			remoteConfig, err := rc.rcRepo.GetByProjectID(ctx, pid)
 			if err != nil {
 				if err == pgx.ErrNoRows {
 					util.WriteStatus(w, http.StatusNotFound)
@@ -54,13 +55,37 @@ func (rc *RemoteConfigHandler) GetDataHandler(w http.ResponseWriter, r *http.Req
 				util.WriteInternalServerError(w)
 				return
 			}
-			util.WriteJsonRaw(w, remoteConfig.Data)
+			util.WriteJson(w, remoteConfig)
 		} else {
 			util.WriteInternalServerError(w)
 		}
 		return
 	}
-	util.WriteJsonRaw(w, data)
+	if version != "" {
+		vi, err := strconv.Atoi(version)
+		if err != nil {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad version %s", version))
+			return
+		}
+		if vi >= *v {
+			util.WriteStatus(w, http.StatusNotFound)
+			return
+		}
+	}
+	ctx, cancel = util.GetContextWithTimeout(r.Context())
+	defer cancel()
+	data, err := rc.rcCache.GetDataByProjectID(ctx, pid)
+	if err != nil {
+		log.Println(err)
+		util.WriteInternalServerError(w)
+		return
+	}
+	remoteConfig := &domain.RemoteConfig{
+		ProjectID: pid,
+		Data:      *data,
+		Version:   *v,
+	}
+	util.WriteJson(w, remoteConfig)
 }
 
 func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +142,7 @@ func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.
 				util.WriteInternalServerError(w)
 				return
 			}
-			util.WriteOK(w)
+			util.WriteJson(w, remoteConfig)
 		} else {
 			log.Println(err)
 			util.WriteInternalServerError(w)
@@ -141,7 +166,7 @@ func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.
 		util.WriteInternalServerError(w)
 		return
 	}
-	util.WriteOK(w)
+	util.WriteJson(w, remoteConfig)
 }
 
 func NewRemoteConfigHandler(
