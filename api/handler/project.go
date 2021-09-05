@@ -240,7 +240,7 @@ func NewProjectHandler(r *mux.Router, authMiddleware mux.MiddlewareFunc, prRepo 
 	p.router.Use(authMiddleware)
 	p.router.HandleFunc("/projects", p.GetAllProjectsHandler).Methods("GET")
 	p.router.HandleFunc("/{id}/", p.GetProjectHandler).Methods("GET")
-	p.router.HandleFunc("/{id}/delete", p.DeleteProjectHandler).Methods("POST")
+	// p.router.HandleFunc("/{id}/delete", p.DeleteProjectHandler).Methods("POST")
 
 	subrouter := p.router.NewRoute().Subrouter()
 	subrouter.Use(middleware.JsonBodyMiddleware)
