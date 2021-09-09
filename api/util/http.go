@@ -13,11 +13,6 @@ type Result struct {
 	Result *interface{} `json:"result,omitempty"`
 }
 
-type ResultRaw struct {
-	Ok     bool            `json:"ok"`
-	Result json.RawMessage `json:"result"`
-}
-
 func WriteOK(w http.ResponseWriter) {
 	result := &Result{
 		Ok: true,
@@ -55,23 +50,6 @@ func WriteJson(w http.ResponseWriter, res interface{}) {
 	result := &Result{
 		Ok:     true,
 		Result: &res,
-	}
-	data, err := json.Marshal(result)
-	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprint(w, http.StatusText(http.StatusInternalServerError))
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(data)
-}
-
-func WriteJsonRaw(w http.ResponseWriter, res string) {
-	result := &ResultRaw{
-		Ok:     true,
-		Result: json.RawMessage(res),
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
