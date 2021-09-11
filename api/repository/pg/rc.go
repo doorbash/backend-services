@@ -16,7 +16,7 @@ func CreateRemoteConfigTable() string {
 (
 	pid VARCHAR(30) NOT NULL PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
 	data JSON NOT NULL,
-	version INTEGER DEFAULT 0
+	version INTEGER DEFAULT 1
 );`
 }
 
@@ -34,8 +34,8 @@ func (rc *RemoteConfigPostgresRepository) GetByProjectID(ctx context.Context, pi
 }
 
 func (rc *RemoteConfigPostgresRepository) Insert(ctx context.Context, remoteConfig *domain.RemoteConfig) error {
-	_, err := rc.pool.Exec(ctx, "INSERT INTO remote_config (pid, data) VALUES ($1, $2)", remoteConfig.ProjectID, remoteConfig.Data)
-	return err
+	row := rc.pool.QueryRow(ctx, "INSERT INTO remote_config (pid, data) VALUES ($1, $2) RETURNING version", remoteConfig.ProjectID, remoteConfig.Data)
+	return row.Scan(&remoteConfig.Version)
 }
 
 func (rc *RemoteConfigPostgresRepository) Update(ctx context.Context, remoteConfig *domain.RemoteConfig) error {

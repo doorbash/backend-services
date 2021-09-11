@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/doorbash/backend-services/api/domain"
@@ -45,7 +46,6 @@ func (u *UserHandler) UserRoleHandler(w http.ResponseWriter, r *http.Request) {
 
 func (u *UserHandler) AdminUpdateUserHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
-	jsonBody := r.Context().Value("json")
 
 	if !authUser.IsAdmin {
 		util.WriteStatus(w, http.StatusForbidden)
@@ -60,14 +60,8 @@ func (u *UserHandler) AdminUpdateUserHandler(w http.ResponseWriter, r *http.Requ
 		util.WriteStatus(w, http.StatusNotFound)
 		return
 	}
-	body, ok := jsonBody.(map[string]interface{})
-	if !ok {
-		log.Println("bad json", jsonBody)
-		util.WriteStatus(w, http.StatusBadRequest)
-		return
-	}
-	userEmail, ok := body["email"].(string)
-	if !ok || userEmail == "" {
+	userEmail := r.PostFormValue("email")
+	if userEmail == "" {
 		log.Println("bad user email")
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
@@ -80,15 +74,9 @@ func (u *UserHandler) AdminUpdateUserHandler(w http.ResponseWriter, r *http.Requ
 		util.WriteStatus(w, http.StatusNotFound)
 		return
 	}
-	quota, ok := body["project_quota"].(float64)
-	if !ok {
-		log.Println("bad project quota")
-		util.WriteStatus(w, http.StatusBadRequest)
-		return
-	}
-	projectQuota := int(quota)
-	if projectQuota < 0 || float64(projectQuota) != quota {
-		log.Println("bad project quota")
+	projectQuota, err := strconv.Atoi(r.PostFormValue("project_quota"))
+	if err != nil {
+		log.Println(err)
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
 	}
@@ -117,7 +105,6 @@ func (u *UserHandler) AdminUpdateUserHandler(w http.ResponseWriter, r *http.Requ
 
 func (u *UserHandler) AdminAddUserHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
-	jsonBody := r.Context().Value("json")
 
 	if !authUser.IsAdmin {
 		util.WriteStatus(w, http.StatusForbidden)
@@ -132,24 +119,18 @@ func (u *UserHandler) AdminAddUserHandler(w http.ResponseWriter, r *http.Request
 		util.WriteStatus(w, http.StatusNotFound)
 		return
 	}
-	body, ok := jsonBody.(map[string]interface{})
-	if !ok {
-		util.WriteError(w, http.StatusBadRequest, "bad json")
-		return
-	}
-	userEmail, ok := body["email"].(string)
-	if !ok || userEmail == "" {
+	userEmail := r.PostFormValue("email")
+	if userEmail == "" {
 		log.Println("bad user email")
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
 	}
-	quota, ok := body["project_quota"].(float64)
-	if !ok {
+	projectQuota, err := strconv.Atoi(r.PostFormValue("project_quota"))
+	if err != nil {
 		util.WriteError(w, http.StatusBadRequest, "bad project quota")
 		return
 	}
-	projectQuota := int(quota)
-	if projectQuota < 0 || float64(projectQuota) != quota {
+	if err != nil {
 		util.WriteError(w, http.StatusBadRequest, "bad project quota")
 		return
 	}
@@ -182,10 +163,8 @@ func NewUserHandler(r *mux.Router, authMiddleware mux.MiddlewareFunc, repo domai
 	u.router.Use(authMiddleware)
 	u.router.HandleFunc("/profile", u.UserProfileHandler).Methods("GET")
 	u.router.HandleFunc("/role", u.UserRoleHandler).Methods("GET")
+	u.router.HandleFunc("/update", u.AdminUpdateUserHandler).Methods("POST")
+	u.router.HandleFunc("/new", u.AdminAddUserHandler).Methods("POST")
 
-	subrouter := u.router.NewRoute().Subrouter()
-	subrouter.Use(middleware.JsonBodyMiddleware)
-	subrouter.HandleFunc("/update", u.AdminUpdateUserHandler).Methods("POST")
-	subrouter.HandleFunc("/new", u.AdminAddUserHandler).Methods("POST")
 	return u
 }

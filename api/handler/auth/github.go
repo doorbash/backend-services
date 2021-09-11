@@ -214,8 +214,8 @@ func NewGithubOAuth2Handler(
 	clientID string,
 	sessionKey string,
 	admin string,
-	apiPath string,
 	isPrivate bool,
+	apiPath string,
 	prefix string,
 ) *GithubOAuth2Handler {
 	rc := &GithubOAuth2Handler{

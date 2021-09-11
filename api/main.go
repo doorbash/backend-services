@@ -86,8 +86,8 @@ func main() {
 		os.Getenv("AUTH_CLIENT_ID"),
 		os.Getenv("AUTH_SESSION_KEY"),
 		os.Getenv("API_ADMIN_EMAIL"),
-		os.Getenv("API_PATH"),
 		os.Getenv("API_MODE") == "private",
+		"/api",
 		"/oauth2",
 	)
 

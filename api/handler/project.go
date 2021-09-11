@@ -70,21 +70,15 @@ func (pr *ProjectHandler) GetProjectHandler(w http.ResponseWriter, r *http.Reque
 
 func (pr *ProjectHandler) CreateProjectHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
-	jsonBody := r.Context().Value("json")
 
-	body, ok := jsonBody.(map[string]interface{})
-	if !ok {
-		util.WriteStatus(w, http.StatusBadRequest)
-		return
-	}
-	name, ok := body["name"].(string)
-	if !ok {
+	name := r.PostFormValue("name")
+	if name == "" {
 		log.Println("no name")
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
 	}
-	id, ok := body["id"].(string)
-	if !ok {
+	id := r.PostFormValue("id")
+	if id == "" {
 		log.Println("no id")
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
@@ -126,7 +120,6 @@ func (pr *ProjectHandler) CreateProjectHandler(w http.ResponseWriter, r *http.Re
 
 func (pr *ProjectHandler) UpdateProjectHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
-	jsonBody := r.Context().Value("json")
 
 	pid, ok := mux.Vars(r)["id"]
 	if !ok {
@@ -134,13 +127,8 @@ func (pr *ProjectHandler) UpdateProjectHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	body, ok := jsonBody.(map[string]interface{})
-	if !ok {
-		util.WriteStatus(w, http.StatusBadRequest)
-		return
-	}
-	name, ok := body["name"].(string)
-	if !ok {
+	name := r.PostFormValue("name")
+	if name == "" {
 		log.Println("no name")
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
@@ -241,10 +229,8 @@ func NewProjectHandler(r *mux.Router, authMiddleware mux.MiddlewareFunc, prRepo 
 	p.router.HandleFunc("/projects", p.GetAllProjectsHandler).Methods("GET")
 	p.router.HandleFunc("/{id}/", p.GetProjectHandler).Methods("GET")
 	// p.router.HandleFunc("/{id}/delete", p.DeleteProjectHandler).Methods("POST")
+	p.router.HandleFunc("/projects/new", p.CreateProjectHandler).Methods("POST")
+	p.router.HandleFunc("/{id}/update", p.UpdateProjectHandler).Methods("POST")
 
-	subrouter := p.router.NewRoute().Subrouter()
-	subrouter.Use(middleware.JsonBodyMiddleware)
-	subrouter.HandleFunc("/projects/new", p.CreateProjectHandler).Methods("POST")
-	subrouter.HandleFunc("/{id}/update", p.UpdateProjectHandler).Methods("POST")
 	return p
 }

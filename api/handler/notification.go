@@ -6,15 +6,16 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/doorbash/backend-services/api/domain"
 	"github.com/doorbash/backend-services/api/util"
 	"github.com/doorbash/backend-services/api/util/middleware"
 	"github.com/go-redis/redis/v8"
-	"github.com/jackc/pgx/v4"
-
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v4"
 )
 
 type NotificationHandler struct {
@@ -88,9 +89,11 @@ func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *
 		util.WriteInternalServerError(w)
 		return
 	}
-	ret := make(map[string]interface{})
-	ret["time"] = time.Now().Format(time.RFC3339)
-	ret["notifications"] = json.RawMessage(*data)
+	log.Println(*data)
+	ret := map[string]interface{}{
+		"time":          time.Now().Format(time.RFC3339),
+		"notifications": json.RawMessage(*data),
+	}
 	util.WriteJson(w, ret)
 }
 
@@ -130,23 +133,16 @@ func (n *NotificationHandler) GetAllNotificationsHandler(w http.ResponseWriter, 
 
 func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
-	jsonbody := r.Context().Value("json")
 
-	projectVar, ok := mux.Vars(r)["id"]
+	pid, ok := mux.Vars(r)["id"]
 	if !ok {
 		log.Println("no id")
 		util.WriteInternalServerError(w)
 		return
 	}
 
-	body, ok := jsonbody.(map[string]interface{})
-	if !ok {
-		util.WriteStatus(w, http.StatusBadRequest)
-		return
-	}
-
-	when, ok := body["when"].(string)
-	if !ok {
+	when := r.PostFormValue("when")
+	if when == "" {
 		when = "now"
 	}
 
@@ -155,8 +151,8 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 
 	switch when {
 	case "later":
-		st, ok := body["schedule_time"].(string)
-		if !ok {
+		st := r.PostFormValue("schedule_time")
+		if st == "" {
 			util.WriteError(w, http.StatusBadRequest, "no schedule_time")
 			return
 		}
@@ -172,8 +168,8 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		}
 		fallthrough
 	case "now":
-		et, ok := body["expire_time"].(string)
-		if !ok {
+		et := r.PostFormValue("expire_time")
+		if et == "" {
 			util.WriteError(w, http.StatusBadRequest, "no expire_time")
 			return
 		}
@@ -197,20 +193,49 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	title, ok := body["title"].(string)
-	if !ok {
+	title := r.PostFormValue("title")
+	if title == "" {
 		util.WriteError(w, http.StatusBadRequest, "no title")
 		return
 	}
-	text, ok := body["text"].(string)
-	if !ok {
+	text := r.PostFormValue("text")
+	if text == "" {
 		util.WriteError(w, http.StatusBadRequest, "no text")
+		return
+	}
+
+	image := r.PostFormValue("image")
+	if image != "" && !strings.HasPrefix(image, "http") {
+		log.Println("bad image:", image)
+		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad image:%s", image))
+		return
+	}
+
+	action := r.PostFormValue("action")
+	var extra string
+	switch action {
+	case "activity":
+		extra = r.PostFormValue("name")
+	case "link":
+		extra = r.PostFormValue("url")
+	case "update":
+		extra = fmt.Sprintf("%s%s", r.PostFormValue("url"), r.PostFormValue("version"))
+	}
+
+	priority := r.PostFormValue("priority")
+	switch priority {
+	case "default", "low", "high", "min", "max":
+	case "":
+		priority = "default"
+	default:
+		log.Println("bad priority:", priority)
+		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad priority %s", priority))
 		return
 	}
 
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	project, err := n.prRepo.GetByID(ctx, projectVar)
+	project, err := n.prRepo.GetByID(ctx, pid)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			util.WriteError(w, http.StatusNotFound, "project not found.")
@@ -231,6 +256,16 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		Title:      title,
 		Text:       text,
 		CreateTime: &now,
+		Priority:   priority,
+	}
+
+	if image != "" {
+		no.Image = &image
+	}
+
+	if action != "" {
+		no.Action = &action
+		no.Extra = &extra
 	}
 
 	switch when {
@@ -267,23 +302,41 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 
 func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
-	jsonbody := r.Context().Value("json")
 
-	body, ok := jsonbody.(map[string]interface{})
-	if !ok {
-		util.WriteStatus(w, http.StatusBadRequest)
+	id, err := strconv.Atoi(r.PostFormValue("id"))
+	if err != nil {
+		log.Println(err)
+		util.WriteError(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	title := r.PostFormValue("title")
+	text := r.PostFormValue("text")
+	st := r.PostFormValue("schedule_time")
+	et := r.PostFormValue("expire_time")
+	action := r.PostFormValue("action")
+
+	var extra string
+	switch action {
+	case "activity":
+		extra = r.PostFormValue("name")
+	case "link":
+		extra = r.PostFormValue("url")
+	case "update":
+		extra = fmt.Sprintf("%s%s", r.PostFormValue("url"), r.PostFormValue("version"))
+	}
+
+	priority := r.PostFormValue("priority")
+	switch priority {
+	case "", "default", "low", "high", "min", "max":
+	default:
+		log.Println("bad priority:", priority)
+		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad priority %s", priority))
 		return
 	}
 
-	_id, _ := body["id"].(float64)
-	title, _ := body["title"].(string)
-	text, _ := body["text"].(string)
-	st, _ := body["schedule_time"].(string)
-	et, _ := body["expire_time"].(string)
-
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	no, err := n.noRepo.GetByID(ctx, int(_id))
+	no, err := n.noRepo.GetByID(ctx, int(id))
 
 	if err != nil {
 		util.WriteStatus(w, http.StatusNotFound)
@@ -317,6 +370,15 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 		no.Text = text
 	}
 
+	if action != "" {
+		no.Action = &action
+		no.Extra = &extra
+	}
+
+	if priority != "" {
+		no.Priority = priority
+	}
+
 	var scheduleTime time.Time
 	if st != "" {
 		if no.Status != domain.NOTIFICATION_STATUS_SCHEDULED {
@@ -347,6 +409,17 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 		no.ExpireTime = &expireTime
 	}
 
+	image := r.PostFormValue("image")
+	if image != "" && !strings.HasPrefix(image, "http") {
+		log.Println("bad image url:", image)
+		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad image url: %s", image))
+		return
+	}
+
+	if image != "" {
+		no.Image = &image
+	}
+
 	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	err = n.noRepo.Update(ctx, no)
@@ -371,19 +444,17 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 
 func (n *NotificationHandler) CancelNotificationHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
-	jsonbody := r.Context().Value("json")
 
-	body, ok := jsonbody.(map[string]interface{})
-	if !ok {
-		util.WriteStatus(w, http.StatusBadRequest)
+	id, err := strconv.Atoi(r.PostFormValue("id"))
+	if err != nil {
+		log.Println(err)
+		util.WriteError(w, http.StatusBadRequest, "bad id")
 		return
 	}
 
-	_id, _ := body["id"].(float64)
-
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	no, err := n.noRepo.GetByID(ctx, int(_id))
+	no, err := n.noRepo.GetByID(ctx, id)
 
 	if err != nil {
 		util.WriteStatus(w, http.StatusNotFound)
@@ -452,12 +523,9 @@ func NewNotificationHandler(
 	authRouter := n.router.NewRoute().Subrouter()
 	authRouter.Use(authMiddleware)
 	authRouter.HandleFunc("/{id}/notifications/all", n.GetAllNotificationsHandler).Methods("GET")
-
-	jsonRouter := authRouter.NewRoute().Subrouter()
-	jsonRouter.Use(middleware.JsonBodyMiddleware)
-	jsonRouter.HandleFunc("/{id}/notifications/new", n.NewNotificationHandler).Methods("POST")
-	jsonRouter.HandleFunc("/notifications/update", n.UpdateNotificationHandler).Methods("POST")
-	jsonRouter.HandleFunc("/notifications/cancel", n.CancelNotificationHandler).Methods("POST")
+	authRouter.HandleFunc("/{id}/notifications/new", n.NewNotificationHandler).Methods("POST")
+	authRouter.HandleFunc("/notifications/update", n.UpdateNotificationHandler).Methods("POST")
+	authRouter.HandleFunc("/notifications/cancel", n.CancelNotificationHandler).Methods("POST")
 
 	return n
 }

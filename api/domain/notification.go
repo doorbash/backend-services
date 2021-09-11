@@ -6,7 +6,6 @@ import (
 )
 
 const (
-	NOTIFICATION_STATUS_PENDING   = 0
 	NOTIFICATION_STATUS_ACTIVE    = 1
 	NOTIFICATION_STATUS_SCHEDULED = 2
 	NOTIFICATION_STATUS_CANCELED  = 3
@@ -19,6 +18,10 @@ type Notification struct {
 	Status       int        `json:"status"`
 	Title        string     `json:"title"`
 	Text         string     `json:"text"`
+	Image        *string    `json:"image,omitempty"`
+	Priority     string     `json:"priority"`
+	Action       *string    `json:"action,omitempty"`
+	Extra        *string    `json:"extra,omitempty"`
 	CreateTime   *time.Time `json:"create_time"`
 	ActiveTime   *time.Time `json:"active_time"`
 	ExpireTime   *time.Time `json:"expire_time"`
