@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -133,6 +132,7 @@ func (n *NotificationHandler) GetAllNotificationsHandler(w http.ResponseWriter, 
 
 func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonbody := r.Context().Value("json")
 
 	pid, ok := mux.Vars(r)["id"]
 	if !ok {
@@ -141,7 +141,13 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	when := r.PostFormValue("when")
+	body, ok := jsonbody.(map[string]interface{})
+	if !ok {
+		util.WriteStatus(w, http.StatusBadRequest)
+		return
+	}
+
+	when, _ := body["when"].(string)
 	if when == "" {
 		when = "now"
 	}
@@ -151,7 +157,7 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 
 	switch when {
 	case "later":
-		st := r.PostFormValue("schedule_time")
+		st, _ := body["schedule_time"].(string)
 		if st == "" {
 			util.WriteError(w, http.StatusBadRequest, "no schedule_time")
 			return
@@ -168,7 +174,7 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		}
 		fallthrough
 	case "now":
-		et := r.PostFormValue("expire_time")
+		et, _ := body["expire_time"].(string)
 		if et == "" {
 			util.WriteError(w, http.StatusBadRequest, "no expire_time")
 			return
@@ -193,36 +199,43 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	title := r.PostFormValue("title")
+	title, _ := body["title"].(string)
 	if title == "" {
 		util.WriteError(w, http.StatusBadRequest, "no title")
 		return
 	}
-	text := r.PostFormValue("text")
+	text, _ := body["text"].(string)
 	if text == "" {
 		util.WriteError(w, http.StatusBadRequest, "no text")
 		return
 	}
 
-	image := r.PostFormValue("image")
+	image, _ := body["image"].(string)
 	if image != "" && !strings.HasPrefix(image, "http") {
 		log.Println("bad image:", image)
 		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad image:%s", image))
 		return
 	}
 
-	action := r.PostFormValue("action")
+	action, _ := body["action"].(string)
 	var extra string
 	switch action {
+	case "":
 	case "activity":
-		extra = r.PostFormValue("name")
+		extra, _ = body["name"].(string)
 	case "link":
-		extra = r.PostFormValue("url")
+		extra, _ = body["url"].(string)
 	case "update":
-		extra = fmt.Sprintf("%s%s", r.PostFormValue("url"), r.PostFormValue("version"))
+		url, _ := body["url"].(string)
+		version, _ := body["version"].(string)
+		extra = fmt.Sprintf("%s%s", url, version)
+	default:
+		log.Println("bad action:", action)
+		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad action %s", action))
+		return
 	}
 
-	priority := r.PostFormValue("priority")
+	priority, _ := body["priority"].(string)
 	switch priority {
 	case "default", "low", "high", "min", "max":
 	case "":
@@ -302,30 +315,43 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 
 func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonBody := r.Context().Value("json")
 
-	id, err := strconv.Atoi(r.PostFormValue("id"))
-	if err != nil {
-		log.Println(err)
-		util.WriteError(w, http.StatusBadRequest, "bad id")
+	body, ok := jsonBody.(map[string]interface{})
+	if !ok {
+		util.WriteStatus(w, http.StatusBadRequest)
 		return
 	}
-	title := r.PostFormValue("title")
-	text := r.PostFormValue("text")
-	st := r.PostFormValue("schedule_time")
-	et := r.PostFormValue("expire_time")
-	action := r.PostFormValue("action")
+
+	id, ok := body["id"].(float64)
+	if !ok {
+		util.WriteError(w, http.StatusBadRequest, "no id")
+		return
+	}
+	title, _ := body["title"].(string)
+	text, _ := body["text"].(string)
+	st, _ := body["schedule_time"].(string)
+	et, _ := body["expire_time"].(string)
+	action, _ := body["action"].(string)
 
 	var extra string
 	switch action {
+	case "":
 	case "activity":
-		extra = r.PostFormValue("name")
+		extra, _ = body["name"].(string)
 	case "link":
-		extra = r.PostFormValue("url")
+		extra, _ = body["url"].(string)
 	case "update":
-		extra = fmt.Sprintf("%s%s", r.PostFormValue("url"), r.PostFormValue("version"))
+		url, _ := body["url"].(string)
+		version, _ := body["version"].(string)
+		extra = fmt.Sprintf("%s%s", url, version)
+	default:
+		log.Println("bad action:", action)
+		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad action %s", action))
+		return
 	}
 
-	priority := r.PostFormValue("priority")
+	priority, _ := body["priority"].(string)
 	switch priority {
 	case "", "default", "low", "high", "min", "max":
 	default:
@@ -409,7 +435,7 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 		no.ExpireTime = &expireTime
 	}
 
-	image := r.PostFormValue("image")
+	image, _ := body["image"].(string)
 	if image != "" && !strings.HasPrefix(image, "http") {
 		log.Println("bad image url:", image)
 		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad image url: %s", image))
@@ -444,17 +470,23 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 
 func (n *NotificationHandler) CancelNotificationHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonBody := r.Context().Value("json")
 
-	id, err := strconv.Atoi(r.PostFormValue("id"))
-	if err != nil {
-		log.Println(err)
-		util.WriteError(w, http.StatusBadRequest, "bad id")
+	body, ok := jsonBody.(map[string]interface{})
+	if !ok {
+		util.WriteStatus(w, http.StatusBadRequest)
+		return
+	}
+
+	id, ok := body["id"].(float64)
+	if !ok {
+		util.WriteError(w, http.StatusBadRequest, "no id")
 		return
 	}
 
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	no, err := n.noRepo.GetByID(ctx, id)
+	no, err := n.noRepo.GetByID(ctx, int(id))
 
 	if err != nil {
 		util.WriteStatus(w, http.StatusNotFound)
@@ -523,9 +555,12 @@ func NewNotificationHandler(
 	authRouter := n.router.NewRoute().Subrouter()
 	authRouter.Use(authMiddleware)
 	authRouter.HandleFunc("/{id}/notifications/all", n.GetAllNotificationsHandler).Methods("GET")
-	authRouter.HandleFunc("/{id}/notifications/new", n.NewNotificationHandler).Methods("POST")
-	authRouter.HandleFunc("/notifications/update", n.UpdateNotificationHandler).Methods("POST")
-	authRouter.HandleFunc("/notifications/cancel", n.CancelNotificationHandler).Methods("POST")
+
+	jsonRouter := authRouter.NewRoute().Subrouter()
+	jsonRouter.Use(middleware.JsonBodyMiddleware)
+	jsonRouter.HandleFunc("/{id}/notifications/new", n.NewNotificationHandler).Methods("POST")
+	jsonRouter.HandleFunc("/notifications/update", n.UpdateNotificationHandler).Methods("POST")
+	jsonRouter.HandleFunc("/notifications/cancel", n.CancelNotificationHandler).Methods("POST")
 
 	return n
 }

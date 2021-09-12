@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -93,6 +94,7 @@ func (rc *RemoteConfigHandler) GetDataHandler(w http.ResponseWriter, r *http.Req
 
 func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonBody := r.Context().Value("json")
 
 	pid, ok := mux.Vars(r)["id"]
 	if !ok {
@@ -119,8 +121,8 @@ func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	data := r.PostFormValue("data")
-	if data == "" {
+	data, err := json.Marshal(jsonBody)
+	if err != nil {
 		log.Println(err)
 		util.WriteInternalServerError(w)
 		return
@@ -187,7 +189,7 @@ func NewRemoteConfigHandler(
 	rc.router.HandleFunc("/{id}/rc", rc.GetDataHandler).Methods("GET")
 
 	authRouter := rc.router.NewRoute().Subrouter()
-	authRouter.Use(authMiddleware)
+	authRouter.Use(authMiddleware, middleware.JsonBodyMiddleware)
 	authRouter.HandleFunc("/{id}/rc", rc.UpdateDataHandler).Methods("POST")
 
 	return rc

@@ -70,19 +70,28 @@ func (pr *ProjectHandler) GetProjectHandler(w http.ResponseWriter, r *http.Reque
 
 func (pr *ProjectHandler) CreateProjectHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonBody := r.Context().Value("json")
 
-	name := r.PostFormValue("name")
-	if name == "" {
+	body, ok := jsonBody.(map[string]interface{})
+	if !ok {
+		util.WriteStatus(w, http.StatusBadRequest)
+		return
+	}
+
+	name, ok := body["name"].(string)
+	if !ok || name == "" {
 		log.Println("no name")
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
 	}
-	id := r.PostFormValue("id")
-	if id == "" {
+
+	id := body["id"].(string)
+	if !ok || id == "" {
 		log.Println("no id")
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
 	}
+
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	user, err := pr.userRepo.GetByEmail(ctx, authUser.Email)
@@ -120,6 +129,7 @@ func (pr *ProjectHandler) CreateProjectHandler(w http.ResponseWriter, r *http.Re
 
 func (pr *ProjectHandler) UpdateProjectHandler(w http.ResponseWriter, r *http.Request) {
 	authUser := r.Context().Value("user").(middleware.AuthUserValue)
+	jsonBody := r.Context().Value("json")
 
 	pid, ok := mux.Vars(r)["id"]
 	if !ok {
@@ -127,12 +137,19 @@ func (pr *ProjectHandler) UpdateProjectHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	name := r.PostFormValue("name")
-	if name == "" {
+	body, ok := jsonBody.(map[string]interface{})
+	if !ok {
+		util.WriteStatus(w, http.StatusBadRequest)
+		return
+	}
+
+	name, ok := body["name"].(string)
+	if !ok || name == "" {
 		log.Println("no name")
 		util.WriteStatus(w, http.StatusBadRequest)
 		return
 	}
+
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	_, err := pr.userRepo.GetByEmail(ctx, authUser.Email)
@@ -144,6 +161,7 @@ func (pr *ProjectHandler) UpdateProjectHandler(w http.ResponseWriter, r *http.Re
 		}
 		return
 	}
+
 	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	project, err := pr.prRepo.GetByID(ctx, pid)
@@ -229,8 +247,11 @@ func NewProjectHandler(r *mux.Router, authMiddleware mux.MiddlewareFunc, prRepo 
 	p.router.HandleFunc("/projects", p.GetAllProjectsHandler).Methods("GET")
 	p.router.HandleFunc("/{id}/", p.GetProjectHandler).Methods("GET")
 	// p.router.HandleFunc("/{id}/delete", p.DeleteProjectHandler).Methods("POST")
-	p.router.HandleFunc("/projects/new", p.CreateProjectHandler).Methods("POST")
-	p.router.HandleFunc("/{id}/update", p.UpdateProjectHandler).Methods("POST")
+
+	jsonRouter := p.router.NewRoute().Subrouter()
+	jsonRouter.Use(middleware.JsonBodyMiddleware)
+	jsonRouter.HandleFunc("/projects/new", p.CreateProjectHandler).Methods("POST")
+	jsonRouter.HandleFunc("/{id}/update", p.UpdateProjectHandler).Methods("POST")
 
 	return p
 }
