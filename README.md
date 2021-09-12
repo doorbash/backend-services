@@ -61,6 +61,9 @@ IMAGE_NAME_NOTIFICATION="backend-services/notification"
 ./run.sh logs api
 ```
 
+## Client
+https://github.com/doorbash/backend-services-android
+
 ## Postman
 https://documenter.getpostman.com/view/13117984/TzzGGtSs
 
