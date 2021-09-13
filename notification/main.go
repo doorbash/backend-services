@@ -7,21 +7,21 @@ import (
 	"os"
 	"time"
 
+	"github.com/doorbash/backend-services/api/cache/redis"
+	"github.com/doorbash/backend-services/api/domain"
 	"github.com/doorbash/backend-services/api/util"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-func UpdateNotifications(pool *pgxpool.Pool) error {
+func UpdateNotifications(pool *pgxpool.Pool, noCache domain.NotificationCache) error {
 	now := time.Now()
 
 	// scheduled(2) -> active(1)
 	ctx, cancel := util.GetContextWithTimeout(context.Background())
 	defer cancel()
-	cmd, err := pool.Exec(ctx, `UPDATE notifications SET status = 1, active_time = $1 WHERE status = 2 AND schedule_time <= $1`, now)
-
+	cmd, err := pool.Exec(ctx, "UPDATE notifications SET status = 1, active_time = $1 WHERE status = 2 AND schedule_time <= $1", now)
 	if err != nil {
-		log.Println(err)
 		return err
 	}
 
@@ -29,18 +29,53 @@ func UpdateNotifications(pool *pgxpool.Pool) error {
 		log.Println("just set", cmd.RowsAffected(), "notifications as active")
 	}
 
-	// -> active(1), scheduled(2) -> finished(4)
+	// active(1), scheduled(2) -> finished(4)
 	ctx, cancel = util.GetContextWithTimeout(context.Background())
 	defer cancel()
-	cmd, err = pool.Exec(ctx, `UPDATE notifications SET status = 4 WHERE (status = 1 OR status = 2) AND expire_time <= $1`, now)
-
+	cmd, err = pool.Exec(ctx, "UPDATE notifications SET status = 4 WHERE (status = 1 OR status = 2) AND expire_time <= $1", now)
 	if err != nil {
-		log.Println(err)
 		return err
 	}
 
 	if cmd.RowsAffected() > 0 {
 		log.Println("just set", cmd.RowsAffected(), "notifications as finished")
+	}
+
+	// udpate notification num_views
+	ctx, cancel = util.GetContextWithTimeout(context.Background())
+	defer cancel()
+	rows, err := pool.Query(ctx, "SELECT MAX(id), pid FROM notifications WHERE status = 1 GROUP BY pid")
+	if err != nil {
+		return err
+	}
+
+	for rows.Next() {
+		var id int
+		var pid string
+		err := rows.Scan(&id, &pid)
+		if err != nil {
+			return err
+		}
+
+		ctx, cancel = util.GetContextWithTimeout(context.Background())
+		defer cancel()
+		views, err := noCache.GetViewByProjectID(ctx, pid)
+		if err != nil {
+			return err
+		}
+
+		if views != "0" {
+			ctx, cancel = util.GetContextWithTimeout(context.Background())
+			defer cancel()
+			cmd, err = pool.Exec(ctx, "UPDATE notifications SET num_views = num_views + $1 WHERE pid = $2", views, pid)
+			if err != nil {
+				return err
+			}
+
+			if cmd.RowsAffected() > 0 {
+				log.Println("just added", views, "views for", cmd.RowsAffected(), "notifications of project:", pid)
+			}
+		}
 	}
 
 	return nil
@@ -69,8 +104,13 @@ func main() {
 		log.Fatalln("Unable to create connection pool. error:", err)
 	}
 
+	noCache := redis.NewNotificationRedisCache()
+
 	for {
-		UpdateNotifications(pool)
+		err := UpdateNotifications(pool, noCache)
+		if err != nil {
+			log.Println(err)
+		}
 		time.Sleep(time.Minute)
 	}
 }

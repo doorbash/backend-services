@@ -53,7 +53,7 @@ func NewRemoteConfigRedisCache(dataExpiry time.Duration) *RemoteConfigRedisCache
 			Addr:            REDIS_ADDR,
 			Password:        "",
 			DB:              REDIS_DATABASE_AUTH,
-			MaxRetries:      0,
+			MaxRetries:      3,
 			MinRetryBackoff: REDIS_MIN_RETRY_BACKOFF,
 			MaxRetryBackoff: REDIS_MAX_RETRY_BACKOFF,
 			OnConnect: func(ctx context.Context, cn *redis.Conn) error {

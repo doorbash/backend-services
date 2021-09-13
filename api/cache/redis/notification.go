@@ -26,13 +26,25 @@ func (n *NotificationRedisCache) GetTimeByProjectID(ctx context.Context, pid str
 }
 
 func (n *NotificationRedisCache) GetDataByProjectID(ctx context.Context, pid string) (*string, error) {
-	data, err := n.rdb.Get(ctx, fmt.Sprintf("%s.d", pid)).Result()
-	return &data, err
+	pipe := n.rdb.TxPipeline()
+	cmd := pipe.Get(ctx, fmt.Sprintf("%s.d", pid))
+	_ = pipe.Incr(ctx, fmt.Sprintf("%s.v", pid))
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	data := cmd.Val()
+	return &data, nil
 }
 
 func (n *NotificationRedisCache) UpdateProjectData(ctx context.Context, pid string, data string, t time.Time, expire time.Duration) error {
 	_, err := n.rdb.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-		if err := pipe.SetNX(ctx, fmt.Sprintf("%s.t", pid), t, expire).Err(); err != nil {
+		err := pipe.SetNX(ctx, fmt.Sprintf("%s.t", pid), t, expire).Err()
+		if err != nil {
+			return err
+		}
+		err = pipe.SetNX(ctx, fmt.Sprintf("%s.v", pid), 0, expire).Err()
+		if err != nil {
 			return err
 		}
 		return pipe.SetNX(ctx, fmt.Sprintf("%s.d", pid), data, expire).Err()
@@ -41,17 +53,30 @@ func (n *NotificationRedisCache) UpdateProjectData(ctx context.Context, pid stri
 }
 
 func (n *NotificationRedisCache) DeleteProjectData(ctx context.Context, pid string) error {
-	return n.rdb.Del(ctx, fmt.Sprintf("%s.d", pid), fmt.Sprintf("%s.t", pid)).Err()
+	return n.rdb.Del(
+		ctx, fmt.Sprintf("%s.d", pid),
+		fmt.Sprintf("%s.t", pid),
+		fmt.Sprintf("%s.v", pid),
+	).Err()
 }
 
 func (n *NotificationRedisCache) SetProjectDataExpire(ctx context.Context, pid string, expiration time.Duration) error {
 	_, err := n.rdb.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-		if err := pipe.Expire(ctx, fmt.Sprintf("%s.d", pid), expiration).Err(); err != nil {
+		err := pipe.Expire(ctx, fmt.Sprintf("%s.d", pid), expiration).Err()
+		if err != nil {
+			return err
+		}
+		err = pipe.Expire(ctx, fmt.Sprintf("%s.v", pid), expiration).Err()
+		if err != nil {
 			return err
 		}
 		return pipe.Expire(ctx, fmt.Sprintf("%s.t", pid), expiration).Err()
 	})
 	return err
+}
+
+func (n *NotificationRedisCache) GetViewByProjectID(ctx context.Context, pid string) (string, error) {
+	return n.rdb.GetSet(ctx, fmt.Sprintf("%s.v", pid), 0).Result()
 }
 
 func NewNotificationRedisCache() *NotificationRedisCache {
@@ -60,7 +85,7 @@ func NewNotificationRedisCache() *NotificationRedisCache {
 			Addr:            REDIS_ADDR,
 			Password:        "",
 			DB:              REDIS_DATABASE_NOTIFICATOINS,
-			MaxRetries:      0,
+			MaxRetries:      3,
 			MinRetryBackoff: REDIS_MIN_RETRY_BACKOFF,
 			MaxRetryBackoff: REDIS_MAX_RETRY_BACKOFF,
 			OnConnect: func(ctx context.Context, cn *redis.Conn) error {
