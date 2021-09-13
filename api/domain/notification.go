@@ -22,7 +22,7 @@ type Notification struct {
 	Priority     string     `json:"priority"`
 	Action       *string    `json:"action,omitempty"`
 	Extra        *string    `json:"extra,omitempty"`
-	NumViews     int        `json:"views"`
+	ViewsCount   int        `json:"views"`
 	CreateTime   *time.Time `json:"create_time"`
 	ActiveTime   *time.Time `json:"active_time"`
 	ExpireTime   *time.Time `json:"expire_time"`

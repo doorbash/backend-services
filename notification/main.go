@@ -41,7 +41,7 @@ func UpdateNotifications(pool *pgxpool.Pool, noCache domain.NotificationCache) e
 		log.Println("just set", cmd.RowsAffected(), "notifications as finished")
 	}
 
-	// udpate notification num_views
+	// udpate notification views_count
 	ctx, cancel = util.GetContextWithTimeout(context.Background())
 	defer cancel()
 	rows, err := pool.Query(ctx, "SELECT MAX(id), pid FROM notifications WHERE status = 1 GROUP BY pid")
@@ -67,7 +67,7 @@ func UpdateNotifications(pool *pgxpool.Pool, noCache domain.NotificationCache) e
 		if views != "0" {
 			ctx, cancel = util.GetContextWithTimeout(context.Background())
 			defer cancel()
-			cmd, err = pool.Exec(ctx, "UPDATE notifications SET num_views = num_views + $1 WHERE pid = $2", views, pid)
+			cmd, err = pool.Exec(ctx, "UPDATE notifications SET views_count = views_count + $1 WHERE pid = $2", views, pid)
 			if err != nil {
 				return err
 			}
