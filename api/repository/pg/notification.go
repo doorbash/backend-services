@@ -26,7 +26,7 @@ func CreateNotificationsTable() (query string) {
 	priority VARCHAR(7) NOT NULL DEFAULT 'default' CHECK(priority in ('default', 'low', 'high', 'min', 'max')),
 	action VARCHAR(30),
 	extra VARCHAR(200),
-	num_views INTEGER DEFAULT 0,
+	views_count INTEGER DEFAULT 0,
 	create_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 	active_time TIMESTAMP WITH TIME ZONE,
 	expire_time TIMESTAMP WITH TIME ZONE,
@@ -35,7 +35,7 @@ func CreateNotificationsTable() (query string) {
 }
 
 func (n *NotificationPostgresRepository) GetByID(ctx context.Context, id int) (*domain.Notification, error) {
-	row := n.pool.QueryRow(ctx, "SELECT id, pid, status, title, text, image, action, extra, num_views, create_time, active_time, expire_time, schedule_time FROM notifications WHERE id = $1", id)
+	row := n.pool.QueryRow(ctx, "SELECT id, pid, status, title, text, image, action, extra, views_count, create_time, active_time, expire_time, schedule_time FROM notifications WHERE id = $1", id)
 	notification := &domain.Notification{}
 	if err := row.Scan(
 		&notification.ID,
@@ -58,7 +58,7 @@ func (n *NotificationPostgresRepository) GetByID(ctx context.Context, id int) (*
 }
 
 func (n *NotificationPostgresRepository) GetByPID(ctx context.Context, pid string, limit int, offset int) ([]domain.Notification, error) {
-	rows, err := n.pool.Query(ctx, "SELECT id, pid, status, title, text, image, action, extra, num_views, create_time, active_time, expire_time, schedule_time FROM notifications WHERE pid = $1 ORDER BY create_time DESC LIMIT $2 OFFSET $3", pid, limit, offset)
+	rows, err := n.pool.Query(ctx, "SELECT id, pid, status, title, text, image, action, extra, views_count, create_time, active_time, expire_time, schedule_time FROM notifications WHERE pid = $1 ORDER BY create_time DESC LIMIT $2 OFFSET $3", pid, limit, offset)
 	if err != nil {
 		return nil, err
 	}
