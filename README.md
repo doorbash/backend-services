@@ -1,5 +1,5 @@
 # backend-services
-A couple of simple backend service APIs for Android apps:
+A couple of simple backend service APIs:
 - Remote config
 - Pull notification 
 
