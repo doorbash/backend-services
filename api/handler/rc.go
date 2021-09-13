@@ -29,7 +29,7 @@ func (rc *RemoteConfigHandler) GetDataHandler(w http.ResponseWriter, r *http.Req
 		util.WriteInternalServerError(w)
 		return
 	}
-	version := util.GetUrlQueryParam(r, "version")
+	version := r.URL.Query().Get("version")
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	v, err := rc.rcCache.GetVersionByProjectID(ctx, pid)

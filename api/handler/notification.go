@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,7 +27,7 @@ type NotificationHandler struct {
 
 func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *http.Request) {
 	pid := mux.Vars(r)["id"]
-	t := util.GetUrlQueryParam(r, "time")
+	t := r.URL.Query().Get("time")
 	var _time *time.Time
 	if t != "" {
 		var err error
@@ -104,6 +105,18 @@ func (n *NotificationHandler) GetAllNotificationsHandler(w http.ResponseWriter, 
 		util.WriteInternalServerError(w)
 		return
 	}
+	query := r.URL.Query()
+	limit, err := strconv.Atoi(query.Get("limit"))
+	if err != nil || limit <= 0 {
+		util.WriteError(w, http.StatusBadRequest, "bad limit")
+		return
+	}
+	offset, err := strconv.Atoi(query.Get("offset"))
+	if err != nil || offset < 0 {
+		util.WriteError(w, http.StatusBadRequest, "bad offset")
+		return
+	}
+
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	project, err := n.prRepo.GetByID(ctx, pid)
@@ -121,7 +134,7 @@ func (n *NotificationHandler) GetAllNotificationsHandler(w http.ResponseWriter, 
 	}
 	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	notifications, err := n.noRepo.GetByPID(ctx, project.ID)
+	notifications, err := n.noRepo.GetByPID(ctx, project.ID, limit, offset)
 	if err != nil {
 		log.Println(err)
 		util.WriteStatus(w, http.StatusBadRequest)

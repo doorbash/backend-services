@@ -57,8 +57,8 @@ func (n *NotificationPostgresRepository) GetByID(ctx context.Context, id int) (*
 	return notification, nil
 }
 
-func (n *NotificationPostgresRepository) GetByPID(ctx context.Context, pid string) ([]domain.Notification, error) {
-	rows, err := n.pool.Query(ctx, "SELECT id, pid, status, title, text, image, action, extra, num_views, create_time, active_time, expire_time, schedule_time FROM notifications WHERE pid = $1 ORDER BY create_time ASC", pid)
+func (n *NotificationPostgresRepository) GetByPID(ctx context.Context, pid string, limit int, offset int) ([]domain.Notification, error) {
+	rows, err := n.pool.Query(ctx, "SELECT id, pid, status, title, text, image, action, extra, num_views, create_time, active_time, expire_time, schedule_time FROM notifications WHERE pid = $1 ORDER BY create_time DESC LIMIT $2 OFFSET $3", pid, limit, offset)
 	if err != nil {
 		return nil, err
 	}

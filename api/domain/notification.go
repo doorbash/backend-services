@@ -31,7 +31,7 @@ type Notification struct {
 
 type NotificationRepository interface {
 	GetByID(ctx context.Context, id int) (*Notification, error)
-	GetByPID(ctx context.Context, pid string) ([]Notification, error)
+	GetByPID(ctx context.Context, pid string, limit int, offset int) ([]Notification, error)
 	Insert(ctx context.Context, n *Notification) error
 	Update(ctx context.Context, n *Notification) error
 	Delete(ctx context.Context, n *Notification) error

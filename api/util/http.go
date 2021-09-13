@@ -74,13 +74,3 @@ func WriteUnauthorized(w http.ResponseWriter) {
 func WriteInternalServerError(w http.ResponseWriter) {
 	WriteStatus(w, http.StatusInternalServerError)
 }
-
-func GetUrlQueryParam(r *http.Request, key string) string {
-	keys, ok := r.URL.Query()[key]
-
-	if !ok || len(keys[0]) < 1 {
-		return ""
-	}
-
-	return keys[0]
-}
