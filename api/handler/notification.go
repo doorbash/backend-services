@@ -227,8 +227,8 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		extra, _ = body["url"].(string)
 	case "update":
 		url, _ := body["url"].(string)
-		version, _ := body["version"].(string)
-		extra = fmt.Sprintf("%s%s", url, version)
+		version, _ := body["version"].(float64)
+		extra = fmt.Sprintf("%s%d", url, int(version))
 	default:
 		log.Println("bad action:", action)
 		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad action %s", action))
