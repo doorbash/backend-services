@@ -20,6 +20,7 @@ type Notification struct {
 	Text         string     `json:"text"`
 	Image        *string    `json:"image,omitempty"`
 	Priority     string     `json:"priority"`
+	Style        string     `json:"style"`
 	Action       *string    `json:"action,omitempty"`
 	Extra        *string    `json:"extra,omitempty"`
 	ViewsCount   int        `json:"views"`

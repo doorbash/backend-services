@@ -23,7 +23,8 @@ func CreateNotificationsTable() (query string) {
 	title VARCHAR(100) NOT NULL,
 	text VARCHAR(200) NOT NULL,
 	image VARCHAR(100),
-	priority VARCHAR(7) NOT NULL DEFAULT 'default' CHECK(priority in ('default', 'low', 'high', 'min', 'max')),
+	priority VARCHAR(7) NOT NULL DEFAULT 'default' CHECK(priority IN ('default', 'low', 'high', 'min', 'max')),
+	style VARCHAR(20) NOT NULL DEFAULT 'normal' CHECK(style IN ('normal', 'big')),
 	action VARCHAR(30),
 	extra VARCHAR(200),
 	views_count INTEGER DEFAULT 0,
@@ -35,7 +36,7 @@ func CreateNotificationsTable() (query string) {
 }
 
 func (n *NotificationPostgresRepository) GetByID(ctx context.Context, id int) (*domain.Notification, error) {
-	row := n.pool.QueryRow(ctx, "SELECT id, pid, status, title, text, image, action, extra, views_count, create_time, active_time, expire_time, schedule_time FROM notifications WHERE id = $1", id)
+	row := n.pool.QueryRow(ctx, "SELECT id, pid, status, title, text, image, priority, style, action, extra, views_count, create_time, active_time, expire_time, schedule_time FROM notifications WHERE id = $1", id)
 	notification := &domain.Notification{}
 	if err := row.Scan(
 		&notification.ID,
@@ -44,6 +45,8 @@ func (n *NotificationPostgresRepository) GetByID(ctx context.Context, id int) (*
 		&notification.Title,
 		&notification.Text,
 		&notification.Image,
+		&notification.Priority,
+		&notification.Style,
 		&notification.Action,
 		&notification.Extra,
 		&notification.ViewsCount,
@@ -58,7 +61,7 @@ func (n *NotificationPostgresRepository) GetByID(ctx context.Context, id int) (*
 }
 
 func (n *NotificationPostgresRepository) GetByPID(ctx context.Context, pid string, limit int, offset int) ([]domain.Notification, error) {
-	rows, err := n.pool.Query(ctx, "SELECT id, pid, status, title, text, image, action, extra, views_count, create_time, active_time, expire_time, schedule_time FROM notifications WHERE pid = $1 ORDER BY create_time DESC LIMIT $2 OFFSET $3", pid, limit, offset)
+	rows, err := n.pool.Query(ctx, "SELECT id, pid, status, title, text, image, priority, style, action, extra, views_count, create_time, active_time, expire_time, schedule_time FROM notifications WHERE pid = $1 ORDER BY create_time DESC LIMIT $2 OFFSET $3", pid, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -72,6 +75,8 @@ func (n *NotificationPostgresRepository) GetByPID(ctx context.Context, pid strin
 			&notification.Title,
 			&notification.Text,
 			&notification.Image,
+			&notification.Priority,
+			&notification.Style,
 			&notification.Action,
 			&notification.Extra,
 			&notification.ViewsCount,
@@ -91,12 +96,14 @@ func (n *NotificationPostgresRepository) GetByPID(ctx context.Context, pid strin
 func (n *NotificationPostgresRepository) Insert(ctx context.Context, notification *domain.Notification) error {
 	row := n.pool.QueryRow(
 		ctx,
-		"INSERT INTO notifications (pid, status, title, text, image, action, extra, create_time, active_time, expire_time, schedule_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, pid, status, title, text, image, action, extra, create_time, active_time, expire_time, schedule_time",
+		"INSERT INTO notifications (pid, status, title, text, image, priority, style, action, extra, create_time, active_time, expire_time, schedule_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, pid, status, title, text, image, priority, style, action, extra, create_time, active_time, expire_time, schedule_time",
 		notification.PID,
 		notification.Status,
 		notification.Title,
 		notification.Text,
 		notification.Image,
+		notification.Priority,
+		notification.Style,
 		notification.Action,
 		notification.Extra,
 		notification.CreateTime,
@@ -111,6 +118,8 @@ func (n *NotificationPostgresRepository) Insert(ctx context.Context, notificatio
 		&notification.Title,
 		&notification.Text,
 		&notification.Image,
+		&notification.Priority,
+		&notification.Style,
 		&notification.Action,
 		&notification.Extra,
 		&notification.CreateTime,
@@ -123,11 +132,13 @@ func (n *NotificationPostgresRepository) Insert(ctx context.Context, notificatio
 func (n *NotificationPostgresRepository) Update(ctx context.Context, notification *domain.Notification) error {
 	_, err := n.pool.Exec(
 		ctx,
-		"UPDATE notifications SET status = $1, title = $2, text = $3, image = $4, action = $5, extra = $6, active_time = $7, expire_time = $8, schedule_time = $9 WHERE id = $10",
+		"UPDATE notifications SET status = $1, title = $2, text = $3, image = $4, priority = $5, style = $6, action = $7, extra = $8, active_time = $9, expire_time = $10, schedule_time = $11 WHERE id = $12",
 		notification.Status,
 		notification.Title,
 		notification.Text,
 		notification.Image,
+		notification.Priority,
+		notification.Style,
 		notification.Action,
 		notification.Extra,
 		notification.ActiveTime,
@@ -148,7 +159,7 @@ func (n *NotificationPostgresRepository) GetDataByPID(ctx context.Context, pid s
 SELECT
 MAX(active_time) AS active_time,
 EXTRACT(EPOCH FROM LEAST(MIN(expire_time), (select schedule_min from schedules)) - CURRENT_TIMESTAMP)::int AS expire,
-'[' || STRING_AGG(CONCAT('{"id":', id, ',"title":"', title, '","text":"', text, '","image":"', image, '","action":"', action, '","extra":"', extra, '"}'), ',') || ']' AS data
+'[' || STRING_AGG(CONCAT('{"id":', id, ',"title":"', title, '","text":"', text, '","image":"', image, '","priority":"', priority, '","style":"', style, '","action":"', action, '","extra":"', extra, '"}'), ',') || ']' AS data
 FROM notifications
 WHERE pid = $1 AND status = 1
 ORDER BY active_time ASC`, pid)

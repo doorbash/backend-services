@@ -259,6 +259,17 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		return
 	}
 
+	style, _ := body["style"].(string)
+	switch style {
+	case "normal", "big":
+	case "":
+		style = "normal"
+	default:
+		log.Println("bad style:", style)
+		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad style %s", style))
+		return
+	}
+
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	project, err := n.prRepo.GetByID(ctx, pid)
@@ -283,6 +294,7 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		Text:       text,
 		CreateTime: &now,
 		Priority:   priority,
+		Style:      style,
 	}
 
 	if image != "" {
@@ -373,6 +385,15 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 		return
 	}
 
+	style, _ := body["style"].(string)
+	switch style {
+	case "", "normal", "big":
+	default:
+		log.Println("bad style:", style)
+		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad style %s", style))
+		return
+	}
+
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	no, err := n.noRepo.GetByID(ctx, int(id))
@@ -416,6 +437,10 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 
 	if priority != "" {
 		no.Priority = priority
+	}
+
+	if style != "" {
+		no.Style = style
 	}
 
 	var scheduleTime time.Time
