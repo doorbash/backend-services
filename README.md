@@ -6,6 +6,7 @@ A couple of simple backend service APIs:
 ## Prerequisites
 - Go
 - Docker
+- Docker Compose
 
 ## Configuration
 - Put SSL key files in:
