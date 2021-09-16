@@ -47,7 +47,7 @@ func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *
 		if err == redis.Nil {
 			ctx, cancel := util.GetContextWithTimeout(r.Context())
 			defer cancel()
-			_activeTime, _expire, _data, err := n.noRepo.GetDataByPID(ctx, pid)
+			_activeTime, _expire, _ids, _data, err := n.noRepo.GetDataByPID(ctx, pid)
 			if err != nil {
 				log.Println(err)
 				util.WriteStatus(w, http.StatusNotFound)
@@ -61,8 +61,7 @@ func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *
 				util.WriteStatus(w, http.StatusNotFound)
 				return
 			}
-			log.Println("UpdateProjectData():", "activeTime:", *activeTime, "expire:", *_expire)
-			err = n.noCache.UpdateProjectData(ctx, pid, *_data, *activeTime, time.Duration(*_expire)*time.Second)
+			err = n.noCache.UpdateProjectData(ctx, pid, *_ids, *_data, *activeTime, time.Duration(*_expire)*time.Second)
 			if err != nil {
 				log.Println(err)
 				util.WriteStatus(w, http.StatusNotFound)
@@ -95,6 +94,24 @@ func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *
 		"notifications": json.RawMessage(*data),
 	}
 	util.WriteJson(w, ret)
+}
+
+func (n *NotificationHandler) NotificationClickedHandler(w http.ResponseWriter, r *http.Request) {
+	pid := mux.Vars(r)["id"]
+	id := r.URL.Query().Get("id")
+	ctx, cancel := util.GetContextWithTimeout(r.Context())
+	defer cancel()
+	done, err := n.noCache.IncrClicks(ctx, pid, id)
+	if err != nil {
+		log.Println(err)
+		util.WriteInternalServerError(w)
+		return
+	}
+	if !done {
+		util.WriteStatus(w, http.StatusNotFound)
+		return
+	}
+	util.WriteOK(w)
 }
 
 func (n *NotificationHandler) GetAllNotificationsHandler(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +252,13 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 	switch action {
 	case "":
 	case "activity":
-		extra, _ = body["name"].(string)
+		name, _ := body["name"].(string)
+		parent, _ := body["parent"].(string)
+		if parent == "" {
+			extra = name
+		} else {
+			extra = fmt.Sprintf("%s %s", parent, name)
+		}
 	case "link":
 		extra, _ = body["url"].(string)
 	case "update":
@@ -363,7 +386,13 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 	switch action {
 	case "":
 	case "activity":
-		extra, _ = body["name"].(string)
+		name, _ := body["name"].(string)
+		parent, _ := body["parent"].(string)
+		if parent == "" {
+			extra = name
+		} else {
+			extra = fmt.Sprintf("%s %s", parent, name)
+		}
 	case "link":
 		extra, _ = body["url"].(string)
 	case "update":
@@ -589,6 +618,7 @@ func NewNotificationHandler(
 	}
 
 	n.router.HandleFunc("/{id}/notifications", n.GetNotificationsHandler).Methods("GET")
+	n.router.HandleFunc("/{id}/notifications/clicked", n.NotificationClickedHandler).Methods("GET")
 
 	authRouter := n.router.NewRoute().Subrouter()
 	authRouter.Use(authMiddleware)

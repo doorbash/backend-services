@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/doorbash/backend-services/api/cache/redis"
@@ -41,25 +42,32 @@ func UpdateNotifications(pool *pgxpool.Pool, noCache domain.NotificationCache) e
 		log.Println("just set", cmd.RowsAffected(), "notifications as finished")
 	}
 
-	// udpate notification views_count
+	// udpate notification views_count, clicks
 	ctx, cancel = util.GetContextWithTimeout(context.Background())
 	defer cancel()
-	rows, err := pool.Query(ctx, "SELECT MAX(id), pid FROM notifications WHERE status = 1 GROUP BY pid")
+	rows, err := pool.Query(ctx, "SELECT STRING_AGG(CONCAT(id::TEXT, ':', clicks::TEXT), ' ' ORDER BY id ASC) as clicks, pid FROM notifications WHERE status = 1 GROUP BY pid")
 	if err != nil {
 		return err
 	}
 
 	for rows.Next() {
-		var id int
+		var c string
 		var pid string
-		err := rows.Scan(&id, &pid)
+		err := rows.Scan(&c, &pid)
 		if err != nil {
 			return err
 		}
 
+		cArr := strings.Split(c, " ")
+		clicks := make(map[string]string)
+		for _, v := range cArr {
+			parts := strings.Split(v, ":")
+			clicks[parts[0]] = parts[1]
+		}
+
 		ctx, cancel = util.GetContextWithTimeout(context.Background())
 		defer cancel()
-		views, err := noCache.GetViewByProjectID(ctx, pid)
+		views, err := noCache.GetViewsByProjectID(ctx, pid)
 		if err != nil {
 			return err
 		}
@@ -67,13 +75,35 @@ func UpdateNotifications(pool *pgxpool.Pool, noCache domain.NotificationCache) e
 		if views != "0" {
 			ctx, cancel = util.GetContextWithTimeout(context.Background())
 			defer cancel()
-			cmd, err = pool.Exec(ctx, "UPDATE notifications SET views_count = views_count + $1 WHERE pid = $2", views, pid)
+			cmd, err = pool.Exec(ctx, "UPDATE notifications SET views_count = views_count + $1 WHERE status = 1 AND pid = $2", views, pid)
 			if err != nil {
 				return err
 			}
 
 			if cmd.RowsAffected() > 0 {
 				log.Println("just added", views, "views for", cmd.RowsAffected(), "notifications of project:", pid)
+			}
+		}
+
+		rClicks, err := noCache.GetClicksByProjectID(ctx, pid)
+
+		if err != nil {
+			return err
+		}
+
+		for k, v := range clicks {
+			cc, ok := rClicks[k]
+			if !ok {
+				continue
+			}
+			if v == cc {
+				continue
+			}
+			ctx, cancel = util.GetContextWithTimeout(context.Background())
+			defer cancel()
+			_, err := pool.Exec(ctx, "UPDATE notifications SET clicks = $1 WHERE status = 1 AND id = $2", cc, k)
+			if err != nil {
+				return err
 			}
 		}
 	}

@@ -24,6 +24,7 @@ type Notification struct {
 	Action       *string    `json:"action,omitempty"`
 	Extra        *string    `json:"extra,omitempty"`
 	ViewsCount   int        `json:"views"`
+	ClicksCount  int        `json:"clicks"`
 	CreateTime   *time.Time `json:"create_time"`
 	ActiveTime   *time.Time `json:"active_time"`
 	ExpireTime   *time.Time `json:"expire_time"`
@@ -36,14 +37,16 @@ type NotificationRepository interface {
 	Insert(ctx context.Context, n *Notification) error
 	Update(ctx context.Context, n *Notification) error
 	Delete(ctx context.Context, n *Notification) error
-	GetDataByPID(ctx context.Context, pid string) (*time.Time, *int32, *string, error)
+	GetDataByPID(ctx context.Context, pid string) (*time.Time, *int32, *string, *string, error)
 }
 
 type NotificationCache interface {
 	GetTimeByProjectID(ctx context.Context, pid string) (*time.Time, error)
 	GetDataByProjectID(ctx context.Context, pid string) (*string, error)
-	GetViewByProjectID(ctx context.Context, pid string) (string, error)
-	UpdateProjectData(ctx context.Context, pid string, data string, t time.Time, expire time.Duration) error
+	GetViewsByProjectID(ctx context.Context, pid string) (string, error)
+	UpdateProjectData(ctx context.Context, pid string, ids string, data string, t time.Time, expire time.Duration) error
 	DeleteProjectData(ctx context.Context, pid string) error
 	SetProjectDataExpire(ctx context.Context, pid string, expiration time.Duration) error
+	GetClicksByProjectID(ctx context.Context, pid string) (map[string]string, error)
+	IncrClicks(ctx context.Context, pid string, id string) (bool, error)
 }
