@@ -48,14 +48,14 @@ func (n *NotificationRedisCache) UpdateProjectData(ctx context.Context, pid stri
 		if err != nil {
 			return err
 		}
-		log.Println("ids = ", ids)
+		// log.Println("ids =", ids)
 		idArr := strings.Split(ids, " ")
 		args := make([]string, 2*len(idArr))
 		for i, id := range idArr {
 			args[i*2] = id
 			args[i*2+1] = "0"
 		}
-		log.Println("args:", args)
+		// log.Println("args:", args)
 		err = pipe.HSet(ctx, fmt.Sprintf("%s.c", pid), args).Err()
 		if err != nil {
 			return err
