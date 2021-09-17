@@ -50,7 +50,7 @@ func (rc *RemoteConfigHandler) GetDataHandler(w http.ResponseWriter, r *http.Req
 			ctx, cancel = util.GetContextWithTimeout(r.Context())
 			defer cancel()
 			err = rc.rcCache.Update(ctx, remoteConfig)
-			if err != nil {
+			if err != nil && err != redis.Nil {
 				log.Println(err)
 				util.WriteInternalServerError(w)
 				return

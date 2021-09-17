@@ -37,14 +37,16 @@ func (c *RemoteConfigRedisCache) GetDataByProjectID(ctx context.Context, pid str
 }
 
 func (c *RemoteConfigRedisCache) Update(ctx context.Context, rc *domain.RemoteConfig) error {
-	_, err := c.rdb.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-		err := pipe.Set(ctx, fmt.Sprintf("%s.v", rc.ProjectID), rc.Version, c.dataExpiry).Err()
-		if err != nil {
-			return err
-		}
-		return pipe.Set(ctx, fmt.Sprintf("%s.d", rc.ProjectID), rc.Data, c.dataExpiry).Err()
-	})
-	return err
+	return c.rdb.Eval(
+		ctx,
+		"local v = tonumber(redis.call('GET', KEYS[1])); if v and tonumber(ARGV[1]) <= v then return nil else redis.call('SET', KEYS[1], ARGV[1]); return redis.call('SET', KEYS[2], ARGV[2]) end",
+		[]string{
+			fmt.Sprintf("%s.v", rc.ProjectID),
+			fmt.Sprintf("%s.d", rc.ProjectID),
+		},
+		rc.Version,
+		rc.Data,
+	).Err()
 }
 
 func NewRemoteConfigRedisCache(dataExpiry time.Duration) *RemoteConfigRedisCache {
