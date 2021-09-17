@@ -41,6 +41,7 @@ type NotificationRepository interface {
 }
 
 type NotificationCache interface {
+	LoadScripts(ctx context.Context) error
 	GetTimeByProjectID(ctx context.Context, pid string) (*time.Time, error)
 	GetDataByProjectID(ctx context.Context, pid string) (*string, error)
 	GetViewsByProjectID(ctx context.Context, pid string) (string, error)

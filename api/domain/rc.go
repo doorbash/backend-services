@@ -29,6 +29,7 @@ type RemoteConfigRepository interface {
 }
 
 type RemoteConfigCache interface {
+	LoadScripts(ctx context.Context) error
 	GetDataByProjectID(ctx context.Context, pid string) (*string, error)
 	GetVersionByProjectID(ctx context.Context, pid string) (*int, error)
 	Update(ctx context.Context, rc *RemoteConfig) error

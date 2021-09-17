@@ -12,6 +12,8 @@ import (
 
 type NotificationRedisCache struct {
 	rdb *redis.Client
+
+	scriptIncrClicks string
 }
 
 func (n *NotificationRedisCache) GetTimeByProjectID(ctx context.Context, pid string) (*time.Time, error) {
@@ -103,15 +105,24 @@ func (n *NotificationRedisCache) GetClicksByProjectID(ctx context.Context, pid s
 }
 
 func (n *NotificationRedisCache) IncrClicks(ctx context.Context, pid string, id string) (bool, error) {
-	ret, err := n.rdb.Eval(
+	ret, err := n.rdb.EvalSha(
 		ctx,
-		"if redis.call('HEXISTS', KEYS[1], KEYS[2])==1 then redis.call('HINCRBY', KEYS[1], KEYS[2], 1); return 't' else return 'f' end",
+		n.scriptIncrClicks,
 		[]string{fmt.Sprintf("%s.c", pid), id},
 	).Result()
 	if err != nil {
 		return false, err
 	}
 	return ret == "t", nil
+}
+
+func (n *NotificationRedisCache) LoadScripts(ctx context.Context) error {
+	var err error
+	n.scriptIncrClicks, err = n.rdb.ScriptLoad(ctx, "if redis.call('HEXISTS', KEYS[1], KEYS[2])==1 then redis.call('HINCRBY', KEYS[1], KEYS[2], 1); return 't' else return 'f' end").Result()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func NewNotificationRedisCache() *NotificationRedisCache {

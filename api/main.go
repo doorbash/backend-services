@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 
+	_cache "github.com/doorbash/backend-services/api/cache"
 	_redis "github.com/doorbash/backend-services/api/cache/redis"
 	handler "github.com/doorbash/backend-services/api/handler"
 	auth "github.com/doorbash/backend-services/api/handler/auth"
@@ -66,6 +67,17 @@ func initDatabase() *pgxpool.Pool {
 	return pool
 }
 
+func initCacheScripts(caches ..._cache.Cache) error {
+	for _, c := range caches {
+		ctx, cancel := util.GetContextWithTimeout(context.Background())
+		defer cancel()
+		if err := c.LoadScripts(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func main() {
 	pool := initDatabase()
 	defer pool.Close()
@@ -75,13 +87,21 @@ func main() {
 	projectRepo := _pg.NewProjectPostgresRepository(pool)
 	noRepo := _pg.NewNotificationPostgresRepository(pool)
 
+	authCache := _redis.NewAuthRedisCache(1 * time.Hour)
+	rcCache := _redis.NewRemoteConfigRedisCache(24 * time.Hour)
+	noCache := _redis.NewNotificationRedisCache()
+
+	if err := initCacheScripts(rcCache, noCache); err != nil {
+		log.Fatalln(err)
+	}
+
 	r := mux.NewRouter()
 	r.Use(middleware.LoggerMiddleware)
 
 	authHandler := auth.NewGithubOAuth2Handler(
 		r,
 		userRepo,
-		_redis.NewAuthRedisCache(1*time.Hour),
+		authCache,
 		os.Getenv("AUTH_CLIENT_SECRET"),
 		os.Getenv("AUTH_CLIENT_ID"),
 		os.Getenv("AUTH_SESSION_KEY"),
@@ -102,13 +122,14 @@ func main() {
 		authHandler.Middleware,
 		rcRepo,
 		projectRepo,
-		_redis.NewRemoteConfigRedisCache(24*time.Hour))
+		rcCache,
+	)
 
 	handler.NewNotificationHandler(
 		r,
 		authHandler.Middleware,
 		noRepo, projectRepo,
-		_redis.NewNotificationRedisCache(),
+		noCache,
 	)
 
 	handler.NewProjectHandler(

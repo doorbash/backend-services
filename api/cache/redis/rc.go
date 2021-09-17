@@ -14,6 +14,8 @@ import (
 type RemoteConfigRedisCache struct {
 	rdb        *redis.Client
 	dataExpiry time.Duration
+
+	scriptUpdateRC string
 }
 
 func (c *RemoteConfigRedisCache) GetVersionByProjectID(ctx context.Context, pid string) (*int, error) {
@@ -37,9 +39,9 @@ func (c *RemoteConfigRedisCache) GetDataByProjectID(ctx context.Context, pid str
 }
 
 func (c *RemoteConfigRedisCache) Update(ctx context.Context, rc *domain.RemoteConfig) error {
-	return c.rdb.Eval(
+	return c.rdb.EvalSha(
 		ctx,
-		"local v = tonumber(redis.call('GET', KEYS[1])); if v and tonumber(ARGV[1]) <= v then return nil else redis.call('SET', KEYS[1], ARGV[1]); return redis.call('SET', KEYS[2], ARGV[2]) end",
+		c.scriptUpdateRC,
 		[]string{
 			fmt.Sprintf("%s.v", rc.ProjectID),
 			fmt.Sprintf("%s.d", rc.ProjectID),
@@ -49,8 +51,17 @@ func (c *RemoteConfigRedisCache) Update(ctx context.Context, rc *domain.RemoteCo
 	).Err()
 }
 
+func (c *RemoteConfigRedisCache) LoadScripts(ctx context.Context) error {
+	var err error
+	c.scriptUpdateRC, err = c.rdb.ScriptLoad(ctx, "local v = tonumber(redis.call('GET', KEYS[1])); if v and tonumber(ARGV[1]) <= v then return nil else redis.call('SET', KEYS[1], ARGV[1]); return redis.call('SET', KEYS[2], ARGV[2]) end").Result()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func NewRemoteConfigRedisCache(dataExpiry time.Duration) *RemoteConfigRedisCache {
-	return &RemoteConfigRedisCache{
+	rcCache := &RemoteConfigRedisCache{
 		rdb: redis.NewClient(&redis.Options{
 			Addr:            REDIS_ADDR,
 			Password:        "",
@@ -65,4 +76,5 @@ func NewRemoteConfigRedisCache(dataExpiry time.Duration) *RemoteConfigRedisCache
 		}),
 		dataExpiry: dataExpiry,
 	}
+	return rcCache
 }
