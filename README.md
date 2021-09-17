@@ -70,5 +70,5 @@ https://documenter.getpostman.com/view/13117984/TzzGGtSs
 
 ## Todo
 - [x] Android client
-- [ ] Ads
 - [ ] Web panel
+- [ ] Ads
