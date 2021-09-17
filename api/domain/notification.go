@@ -49,5 +49,6 @@ type NotificationCache interface {
 	DeleteProjectData(ctx context.Context, pid string) error
 	SetProjectDataExpire(ctx context.Context, pid string, expiration time.Duration) error
 	GetClicksByProjectID(ctx context.Context, pid string) (map[string]string, error)
-	IncrClicks(ctx context.Context, pid string, id string) (bool, error)
+	IncrClicks(ctx context.Context, pid string, id string) error
+	IncrClicksIds(ctx context.Context, pid string, ids []string) error
 }

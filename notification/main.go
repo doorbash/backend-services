@@ -42,10 +42,10 @@ func UpdateNotifications(pool *pgxpool.Pool, noCache domain.NotificationCache) e
 		log.Println("just set", cmd.RowsAffected(), "notifications as finished")
 	}
 
-	// udpate notification views_count, clicks
+	// udpate notification views_count, clicks_count
 	ctx, cancel = util.GetContextWithTimeout(context.Background())
 	defer cancel()
-	rows, err := pool.Query(ctx, "SELECT STRING_AGG(CONCAT(id::TEXT, ':', clicks::TEXT), ' ' ORDER BY id ASC) as clicks, pid FROM notifications WHERE status = 1 GROUP BY pid")
+	rows, err := pool.Query(ctx, "SELECT STRING_AGG(CONCAT(id::TEXT, ':', clicks_count::TEXT), ' ' ORDER BY id ASC) as clicks_count, pid FROM notifications WHERE status = 1 GROUP BY pid")
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func UpdateNotifications(pool *pgxpool.Pool, noCache domain.NotificationCache) e
 			}
 			ctx, cancel = util.GetContextWithTimeout(context.Background())
 			defer cancel()
-			_, err := pool.Exec(ctx, "UPDATE notifications SET clicks = $1 WHERE status = 1 AND id = $2", cc, k)
+			_, err := pool.Exec(ctx, "UPDATE notifications SET clicks_count = $1 WHERE status = 1 AND id = $2", cc, k)
 			if err != nil {
 				return err
 			}

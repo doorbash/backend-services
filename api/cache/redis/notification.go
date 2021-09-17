@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -52,6 +53,9 @@ func (n *NotificationRedisCache) UpdateProjectData(ctx context.Context, pid stri
 		}
 		// log.Println("ids =", ids)
 		idArr := strings.Split(ids, " ")
+		if len(idArr) == 0 {
+			return errors.New("len(ids) = 0")
+		}
 		args := make([]string, 2*len(idArr))
 		for i, id := range idArr {
 			args[i*2] = id
@@ -104,21 +108,31 @@ func (n *NotificationRedisCache) GetClicksByProjectID(ctx context.Context, pid s
 	return n.rdb.HGetAll(ctx, fmt.Sprintf("%s.c", pid)).Result()
 }
 
-func (n *NotificationRedisCache) IncrClicks(ctx context.Context, pid string, id string) (bool, error) {
-	ret, err := n.rdb.EvalSha(
+func (n *NotificationRedisCache) IncrClicks(ctx context.Context, pid string, id string) error {
+	return n.rdb.EvalSha(
 		ctx,
 		n.scriptIncrClicks,
 		[]string{fmt.Sprintf("%s.c", pid), id},
-	).Result()
-	if err != nil {
-		return false, err
+	).Err()
+}
+
+func (n *NotificationRedisCache) IncrClicksIds(ctx context.Context, pid string, ids []string) error {
+	for _, id := range ids {
+		err := n.rdb.EvalSha(
+			ctx,
+			n.scriptIncrClicks,
+			[]string{fmt.Sprintf("%s.c", pid), id},
+		).Err()
+		if err != redis.Nil {
+			return err
+		}
 	}
-	return ret == "t", nil
+	return nil
 }
 
 func (n *NotificationRedisCache) LoadScripts(ctx context.Context) error {
 	var err error
-	n.scriptIncrClicks, err = n.rdb.ScriptLoad(ctx, "if redis.call('HEXISTS', KEYS[1], KEYS[2])==1 then redis.call('HINCRBY', KEYS[1], KEYS[2], 1); return 't' else return 'f' end").Result()
+	n.scriptIncrClicks, err = n.rdb.ScriptLoad(ctx, "if redis.call('HEXISTS', KEYS[1], KEYS[2])==1 then redis.call('HINCRBY', KEYS[1], KEYS[2], 1); return 1 else return nil end").Result()
 	if err != nil {
 		return err
 	}

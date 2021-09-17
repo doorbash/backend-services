@@ -98,17 +98,18 @@ func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *
 
 func (n *NotificationHandler) NotificationClickedHandler(w http.ResponseWriter, r *http.Request) {
 	pid := mux.Vars(r)["id"]
-	id := r.URL.Query().Get("id")
+	ids := r.URL.Query().Get("ids")
+	idArr := strings.Split(ids, ",")
+	if len(idArr) > 10 {
+		util.WriteError(w, http.StatusBadRequest, "too much ids. max length is 10")
+		return
+	}
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
-	done, err := n.noCache.IncrClicks(ctx, pid, id)
+	err := n.noCache.IncrClicksIds(ctx, pid, idArr)
 	if err != nil {
 		log.Println(err)
 		util.WriteInternalServerError(w)
-		return
-	}
-	if !done {
-		util.WriteStatus(w, http.StatusNotFound)
 		return
 	}
 	util.WriteOK(w)
