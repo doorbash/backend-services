@@ -7,7 +7,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
+	"time"
 
 	"github.com/doorbash/backend-services/api/domain"
 	"github.com/doorbash/backend-services/api/util"
@@ -44,6 +47,8 @@ func (o *GithubOAuth2Handler) Middleware(h http.Handler) http.Handler {
 }
 
 func (o *GithubOAuth2Handler) LoginHandler(w http.ResponseWriter, r *http.Request) {
+	redirectPath := r.URL.Query().Get("redirect_path")
+
 	b := make([]byte, 16)
 	rand.Read(b)
 
@@ -51,6 +56,22 @@ func (o *GithubOAuth2Handler) LoginHandler(w http.ResponseWriter, r *http.Reques
 
 	session, _ := o.store.Get(r, SESSION_STORE_KEY)
 	session.Values["state"] = state
+	if redirectPath != "" {
+		u, err := url.Parse(redirectPath)
+		if err != nil {
+			log.Println(err)
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad redirect_path: %s", redirectPath))
+			return
+		}
+		if u.Scheme != "" || u.Host != "" {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("redirect_path must be relative: %s", redirectPath))
+			return
+		}
+
+		session.Values["redirect_path"] = redirectPath
+	} else {
+		session.Values["redirect_path"] = ""
+	}
 	session.Save(r, w)
 
 	url := o.oauthCfg.AuthCodeURL(state)
@@ -64,22 +85,72 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	redirectPath, _ := session.Values["redirect_path"].(string)
+
 	if r.URL.Query().Get("state") != session.Values["state"] {
-		util.WriteError(w, http.StatusBadRequest, "No state match; possible csrf OR cookies not enabled")
+		e := "No state match; possible csrf OR cookies not enabled"
+		log.Println(e)
+		if redirectPath == "" {
+			util.WriteError(w, http.StatusBadRequest, e)
+		} else {
+			http.Redirect(
+				w,
+				r,
+				fmt.Sprintf(
+					"%s?error=%s",
+					redirectPath,
+					url.QueryEscape(e),
+				),
+				http.StatusFound,
+			)
+		}
 		return
 	}
 
+	http.DefaultTransport.(*http.Transport).DialContext = (&net.Dialer{
+		Timeout: 10 * time.Second,
+	}).DialContext
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	token, err := o.oauthCfg.Exchange(r.Context(), r.URL.Query().Get("code"))
 	if err != nil {
 		log.Println(err)
-		util.WriteError(w, http.StatusBadRequest, "There was an issue getting your token")
+		e := "There was an issue getting your token"
+		log.Println(e)
+		if redirectPath == "" {
+			util.WriteError(w, http.StatusBadRequest, e)
+		} else {
+			http.Redirect(
+				w,
+				r,
+				fmt.Sprintf(
+					"%s?error=%s",
+					redirectPath,
+					url.QueryEscape(e),
+				),
+				http.StatusFound,
+			)
+		}
 		return
 	}
 
 	if !token.Valid() {
-		util.WriteError(w, http.StatusBadRequest, "Retreived invalid token")
+		e := "Retreived invalid token"
+		log.Println(e)
+		if redirectPath == "" {
+			util.WriteError(w, http.StatusBadRequest, e)
+		} else {
+			http.Redirect(
+				w,
+				r,
+				fmt.Sprintf(
+					"%s?error=%s",
+					redirectPath,
+					url.QueryEscape(e),
+				),
+				http.StatusFound,
+			)
+		}
 		return
 	}
 
@@ -93,7 +164,22 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 		if err != nil {
 			log.Println(err)
 		}
-		util.WriteError(w, http.StatusBadRequest, "Error getting email from github. Please make sure you have set your email as Public email in Github settings.")
+		e := "Error getting email from github. Please make sure you have set your email as Public email in Github settings."
+		log.Println(e)
+		if redirectPath == "" {
+			util.WriteError(w, http.StatusBadRequest, e)
+		} else {
+			http.Redirect(
+				w,
+				r,
+				fmt.Sprintf(
+					"%s?error=%s",
+					redirectPath,
+					url.QueryEscape(e),
+				),
+				http.StatusFound,
+			)
+		}
 		return
 	}
 
@@ -107,8 +193,22 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 		if err == pgx.ErrNoRows {
 			// no record in database for this user
 			if email != o.admin && o.isPrivate {
-				log.Printf("login from %s but API is private\n", email)
-				util.WriteError(w, http.StatusForbidden, "This API is private. Please contact administrator.")
+				e := "This API is private. Please contact administrator."
+				log.Println(e)
+				if redirectPath == "" {
+					util.WriteError(w, http.StatusForbidden, e)
+				} else {
+					http.Redirect(
+						w,
+						r,
+						fmt.Sprintf(
+							"%s?error=%s",
+							redirectPath,
+							url.QueryEscape(e),
+						),
+						http.StatusFound,
+					)
+				}
 				return
 			}
 			ctx, cancel = util.GetContextWithTimeout(context.Background())
@@ -117,12 +217,40 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 			err = o.userRepo.Insert(ctx, user)
 			if err != nil {
 				log.Println(err)
-				util.WriteInternalServerError(w)
+
+				if redirectPath == "" {
+					util.WriteInternalServerError(w)
+				} else {
+					http.Redirect(
+						w,
+						r,
+						fmt.Sprintf(
+							"%s?error=%s",
+							redirectPath,
+							url.QueryEscape(http.StatusText(http.StatusInternalServerError)),
+						),
+						http.StatusFound,
+					)
+				}
 				return
 			}
 		} else {
 			log.Println(err)
-			util.WriteInternalServerError(w)
+
+			if redirectPath == "" {
+				util.WriteInternalServerError(w)
+			} else {
+				http.Redirect(
+					w,
+					r,
+					fmt.Sprintf(
+						"%s?error=%s",
+						redirectPath,
+						url.QueryEscape(http.StatusText(http.StatusInternalServerError)),
+					),
+					http.StatusFound,
+				)
+			}
 			return
 		}
 	}
@@ -133,7 +261,21 @@ func (o *GithubOAuth2Handler) CallbackHandler(w http.ResponseWriter, r *http.Req
 
 	if err != nil {
 		log.Println(err)
-		util.WriteInternalServerError(w)
+
+		if redirectPath == "" {
+			util.WriteInternalServerError(w)
+		} else {
+			http.Redirect(
+				w,
+				r,
+				fmt.Sprintf(
+					"%s?error=%s",
+					redirectPath,
+					url.QueryEscape(http.StatusText(http.StatusInternalServerError)),
+				),
+				http.StatusFound,
+			)
+		}
 		return
 	}
 
@@ -148,16 +290,47 @@ func (o *GithubOAuth2Handler) CredentialsHandler(w http.ResponseWriter, r *http.
 		util.WriteError(w, http.StatusBadRequest, "Aborted")
 		return
 	}
+
+	redirectPath, _ := session.Values["redirect_path"].(string)
+
 	email, ok := session.Values["email"].(string)
 	if !ok {
-		log.Println("no email")
-		util.WriteStatus(w, http.StatusBadRequest)
+		e := "no email"
+		log.Println(e)
+		if redirectPath == "" {
+			util.WriteError(w, http.StatusBadRequest, e)
+		} else {
+			http.Redirect(
+				w,
+				r,
+				fmt.Sprintf(
+					"%s?error=%s",
+					redirectPath,
+					url.QueryEscape(e),
+				),
+				http.StatusFound,
+			)
+		}
 		return
 	}
 	id, ok := session.Values["id"].(int)
 	if !ok {
-		log.Println("no id")
-		util.WriteStatus(w, http.StatusBadRequest)
+		e := "no id"
+		log.Println(e)
+		if redirectPath == "" {
+			util.WriteError(w, http.StatusBadRequest, e)
+		} else {
+			http.Redirect(
+				w,
+				r,
+				fmt.Sprintf(
+					"%s?error=%s",
+					redirectPath,
+					url.QueryEscape(e),
+				),
+				http.StatusFound,
+			)
+		}
 		return
 	}
 
@@ -167,7 +340,21 @@ func (o *GithubOAuth2Handler) CredentialsHandler(w http.ResponseWriter, r *http.
 
 	if err != nil {
 		log.Println(err)
-		util.WriteInternalServerError(w)
+
+		if redirectPath == "" {
+			util.WriteInternalServerError(w)
+		} else {
+			http.Redirect(
+				w,
+				r,
+				fmt.Sprintf(
+					"%s?error=%s",
+					redirectPath,
+					url.QueryEscape(http.StatusText(http.StatusInternalServerError)),
+				),
+				http.StatusFound,
+			)
+		}
 		return
 	}
 
@@ -177,7 +364,21 @@ func (o *GithubOAuth2Handler) CredentialsHandler(w http.ResponseWriter, r *http.
 
 	if err != nil {
 		log.Println(err)
-		util.WriteInternalServerError(w)
+
+		if redirectPath == "" {
+			util.WriteInternalServerError(w)
+		} else {
+			http.Redirect(
+				w,
+				r,
+				fmt.Sprintf(
+					"%s?error=%s",
+					redirectPath,
+					url.QueryEscape(http.StatusText(http.StatusInternalServerError)),
+				),
+				http.StatusFound,
+			)
+		}
 		return
 	}
 
@@ -187,10 +388,31 @@ func (o *GithubOAuth2Handler) CredentialsHandler(w http.ResponseWriter, r *http.
 		ExpiresIn:   o.authCache.GetTokenExpiry(),
 	}
 
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Pragma", "no-cache")
-
-	util.WriteJson(w, authToken)
+	if redirectPath == "" {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Pragma", "no-cache")
+		util.WriteJson(w, authToken)
+	} else {
+		http.SetCookie(w, &http.Cookie{
+			Name:   "access_token",
+			Value:  authToken.AccessToken,
+			MaxAge: int(authToken.ExpiresIn.Seconds()),
+			Path:   "/",
+		})
+		var role string
+		if o.admin == email {
+			role = "admin"
+		} else {
+			role = "member"
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name:   "role",
+			Value:  role,
+			MaxAge: int(authToken.ExpiresIn.Seconds()),
+			Path:   "/",
+		})
+		http.Redirect(w, r, redirectPath, http.StatusFound)
+	}
 }
 
 func (o *GithubOAuth2Handler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
