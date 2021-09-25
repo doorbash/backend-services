@@ -3,7 +3,7 @@ module github.com/doorbash/backend-services/notification
 go 1.17
 
 require (
-	github.com/doorbash/backend-services/api v0.0.0-00010101000000-000000000000
+	github.com/doorbash/backend-services/api v0.0.0-20210925102541-30315bf321d7
 	github.com/jackc/pgx/v4 v4.13.0
 )
 
@@ -22,5 +22,3 @@ require (
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
 	golang.org/x/text v0.3.6 // indirect
 )
-
-replace github.com/doorbash/backend-services/api => ../api
