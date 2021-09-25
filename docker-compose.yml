@@ -26,7 +26,6 @@ services:
       - db
     image: ${IMAGE_NAME_PGADMIN}
   api:
-    build: ./api
     restart: always
     environment: 
       API_MODE: ${API_MODE}
@@ -43,7 +42,6 @@ services:
       - redis
     image: ${IMAGE_NAME_API}
   notification:
-    build: ./notification
     restart: always
     environment:
       DATABASE_USER: ${DATABASE_USER}
