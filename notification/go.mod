@@ -3,7 +3,7 @@ module github.com/doorbash/backend-services/notification
 go 1.17
 
 require (
-	github.com/doorbash/backend-services/api v0.0.0-20210925102541-30315bf321d7
+	github.com/doorbash/backend-services/api v0.0.0-20210925122259-0582dcc5e28c
 	github.com/jackc/pgx/v4 v4.13.0
 )
 
