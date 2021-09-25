@@ -34,7 +34,7 @@ docker/nginx/cert/privkey.pem
 
 - Create `.env`:
 ```
-APP_VERSION=1.0.0-alpha.11
+APP_VERSION=1.0.0
 
 API_MODE="private"
 API_LISTEN_ADDR=":8080"
