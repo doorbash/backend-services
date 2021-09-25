@@ -41,7 +41,7 @@ jobs:
         id: docker_build_api
         uses: docker/build-push-action@v2
         with:
-          context: ./
+          context: ./api
           file: ./api/Dockerfile
           platforms: linux/amd64
           builder: ${{ steps.buildx.outputs.name }}
@@ -56,7 +56,7 @@ jobs:
         id: docker_build_notification
         uses: docker/build-push-action@v2
         with:
-          context: ./
+          context: ./notification
           file: ./notification/Dockerfile
           platforms: linux/amd64
           builder: ${{ steps.buildx.outputs.name }}
