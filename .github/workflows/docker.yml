@@ -29,12 +29,14 @@ jobs:
         run: |
           cd api
           CGO_ENABLED=0 go build
+          chmod +x api
           cd ..
       
       - name: Build notification
         run: |
           cd notification
           CGO_ENABLED=0 go build
+          chmod +x notification
           cd ..
 
       - name: Set up Docker Buildx
