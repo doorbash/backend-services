@@ -21,10 +21,6 @@ import (
 	"github.com/doorbash/backend-services/api/util/middleware"
 )
 
-const (
-	API_VERSION = "1.0.0"
-)
-
 func initDatabase() *pgxpool.Pool {
 	poolConfig, err := pgxpool.ParseConfig(fmt.Sprintf(
 		"postgres://%s:%s@db:5432/%s",
