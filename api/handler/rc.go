@@ -30,6 +30,15 @@ func (rc *RemoteConfigHandler) GetDataHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 	version := r.URL.Query().Get("version")
+	var vi int
+	if version != "" {
+		var err error
+		vi, err = strconv.Atoi(version)
+		if err != nil {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad version %s", version))
+			return
+		}
+	}
 	ctx, cancel := util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	v, err := rc.rcCache.GetVersionByProjectID(ctx, pid)
@@ -55,22 +64,19 @@ func (rc *RemoteConfigHandler) GetDataHandler(w http.ResponseWriter, r *http.Req
 				util.WriteInternalServerError(w)
 				return
 			}
+			if vi >= remoteConfig.Version {
+				util.WriteStatus(w, http.StatusNotFound)
+				return
+			}
 			util.WriteJson(w, remoteConfig)
 		} else {
 			util.WriteInternalServerError(w)
 		}
 		return
 	}
-	if version != "" {
-		vi, err := strconv.Atoi(version)
-		if err != nil {
-			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad version %s", version))
-			return
-		}
-		if vi >= *v {
-			util.WriteStatus(w, http.StatusNotFound)
-			return
-		}
+	if vi >= *v {
+		util.WriteStatus(w, http.StatusNotFound)
+		return
 	}
 	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
