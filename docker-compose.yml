@@ -41,7 +41,7 @@ services:
     depends_on:
       - db
       - redis
-    image: doorbash/backend-services-api:${APP_VERSION}
+    image: ghcr.io/doorbash/backend-services-api:${APP_VERSION}
   notification:
     build: ./notification
     restart: always
@@ -51,7 +51,7 @@ services:
       DATABASE_NAME: ${DATABASE_NAME}
     depends_on:
       - db
-    image: doorbash/backend-services-notification:${APP_VERSION}
+    image: ghcr.io/doorbash/backend-services-notification:${APP_VERSION}
   nginx:
     restart: always
     volumes: 
