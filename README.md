@@ -34,7 +34,7 @@ docker/nginx/cert/privkey.pem
 
 - Create `.env`:
 ```
-APP_VERSION=1.0.2
+APP_VERSION=1.0.3
 
 API_MODE="private"
 API_LISTEN_ADDR=":8080"
@@ -52,7 +52,7 @@ PGADMIN_DEFAULT_EMAIL="PUT_PG_ADMIN_EMAIL_HERE"
 PGADMIN_DEFAULT_PASSWORD="PUT_PG_ADMIN_PASSWORD_HERE"
 
 IMAGE_POSTGRES="postgres:14.1-alpine3.15"
-IMAGE_PGADMIN="dpage/pgadmin4:6.2"
+IMAGE_PGADMIN="dpage/pgadmin4:6.3"
 IMAGE_NGINX="nginx:1.21.4-alpine"
 IMAGE_REDIS="redis:6.2.6-alpine3.15"
 ```
