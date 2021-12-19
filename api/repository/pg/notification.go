@@ -163,7 +163,7 @@ SELECT
 MAX(active_time) AS active_time,
 EXTRACT(EPOCH FROM LEAST(MIN(expire_time), (select schedule_min from schedules)) - CURRENT_TIMESTAMP)::INT AS expire,
 STRING_AGG(id::TEXT, ' ' ORDER BY id ASC) AS ids,
-'[' || STRING_AGG(CONCAT('{"id":', id, ',"title":"', title, '","text":"', text, '","image":"', image, '","priority":"', priority, '","style":"', style, '","action":"', action, '","extra":"', extra, '","active_time":"', active_time, '"}'), ',') || ']' AS data
+'[' || STRING_AGG(CONCAT('{"id":', id, ',"title":"', title, '","text":"', text, '","image":"', image, '","priority":"', priority, '","style":"', style, '","action":"', action, '","extra":"', extra, '","active_time":"', to_char((active_time::timestamp), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), '"}'), ',') || ']' AS data
 FROM notifications
 WHERE pid = $1 AND status = 1
 ORDER BY active_time ASC`, pid)
