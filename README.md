@@ -34,7 +34,7 @@ docker/nginx/cert/privkey.pem
 
 - Create `.env`:
 ```
-APP_VERSION=1.0.4
+APP_VERSION=1.1
 
 API_MODE="private"
 API_LISTEN_ADDR=":8080"
@@ -59,7 +59,7 @@ IMAGE_REDIS="redis:6.2.6-alpine3.15"
 
 ## Run
 ```
-./run.sh production
+./run.sh prod
 ```
 
 ## Client

@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,7 +12,6 @@ import (
 	"github.com/doorbash/backend-services/api/domain"
 	"github.com/doorbash/backend-services/api/util"
 	"github.com/doorbash/backend-services/api/util/middleware"
-	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v4"
 )
@@ -44,36 +42,7 @@ func (n *NotificationHandler) GetNotificationsHandler(w http.ResponseWriter, r *
 	activeTime, err := n.noCache.GetTimeByProjectID(ctx, pid)
 	if err != nil {
 		log.Println(err)
-		if err == redis.Nil {
-			ctx, cancel := util.GetContextWithTimeout(r.Context())
-			defer cancel()
-			_activeTime, _expire, _ids, _data, err := n.noRepo.GetDataByPID(ctx, pid)
-			if err != nil {
-				log.Println(err)
-				util.WriteStatus(w, http.StatusNotFound)
-				return
-			}
-			activeTime = _activeTime
-			ctx, cancel = util.GetContextWithTimeout(context.Background())
-			defer cancel()
-			if *_expire < 0 {
-				log.Println("expire < 0, expire:", _expire, "seconds")
-				util.WriteStatus(w, http.StatusNotFound)
-				return
-			}
-			err = n.noCache.UpdateProjectData(ctx, pid, *_ids, *_data, *activeTime, time.Duration(*_expire)*time.Second)
-			if err != nil {
-				log.Println(err)
-				util.WriteStatus(w, http.StatusNotFound)
-				return
-			}
-			ret := make(map[string]interface{})
-			ret["time"] = time.Now().Format(time.RFC3339)
-			ret["notifications"] = json.RawMessage(*_data)
-			util.WriteJson(w, ret)
-		} else {
-			util.WriteStatus(w, http.StatusNotFound)
-		}
+		util.WriteStatus(w, http.StatusNotFound)
 		return
 	}
 	if _time != nil && !_time.Before(*activeTime) {
@@ -347,15 +316,6 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 	if err != nil {
 		log.Println(err)
 		util.WriteStatus(w, http.StatusBadRequest)
-		return
-	}
-
-	ctx, cancel = util.GetContextWithTimeout(r.Context())
-	defer cancel()
-	err = n.noCache.SetProjectDataExpire(ctx, project.ID, 30*time.Second)
-	if err != nil {
-		log.Println(err)
-		util.WriteInternalServerError(w)
 		return
 	}
 

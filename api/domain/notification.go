@@ -37,12 +37,12 @@ type NotificationRepository interface {
 	Insert(ctx context.Context, n *Notification) error
 	Update(ctx context.Context, n *Notification) error
 	Delete(ctx context.Context, n *Notification) error
-	GetDataByPID(ctx context.Context, pid string) (*time.Time, *int32, *string, *string, error)
 }
 
 type NotificationCache interface {
 	LoadScripts(ctx context.Context) error
 	GetTimeByProjectID(ctx context.Context, pid string) (*time.Time, error)
+	GetDataExistsByProjectID(ctx context.Context, pid string) (bool, error)
 	GetDataByProjectID(ctx context.Context, pid string) (*string, error)
 	GetViewsByProjectID(ctx context.Context, pid string) (string, error)
 	UpdateProjectData(ctx context.Context, pid string, ids string, data string, t time.Time, expire time.Duration) error

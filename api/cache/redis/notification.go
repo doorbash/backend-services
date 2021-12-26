@@ -29,6 +29,20 @@ func (n *NotificationRedisCache) GetTimeByProjectID(ctx context.Context, pid str
 	return &ret, nil
 }
 
+func (n *NotificationRedisCache) GetDataExistsByProjectID(ctx context.Context, pid string) (bool, error) {
+	ret, err := n.rdb.Exists(
+		ctx,
+		fmt.Sprintf("%s.t", pid),
+		fmt.Sprintf("%s.v", pid),
+		fmt.Sprintf("%s.c", pid),
+		fmt.Sprintf("%s.d", pid),
+	).Result()
+	if err != nil {
+		return false, err
+	}
+	return ret == 4, nil
+}
+
 func (n *NotificationRedisCache) GetDataByProjectID(ctx context.Context, pid string) (*string, error) {
 	pipe := n.rdb.TxPipeline()
 	cmd := pipe.Get(ctx, fmt.Sprintf("%s.d", pid))

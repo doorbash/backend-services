@@ -43,35 +43,7 @@ func (rc *RemoteConfigHandler) GetDataHandler(w http.ResponseWriter, r *http.Req
 	defer cancel()
 	v, err := rc.rcCache.GetVersionByProjectID(ctx, pid)
 	if err != nil {
-		log.Println(err)
-		if err == redis.Nil {
-			ctx, cancel = util.GetContextWithTimeout(r.Context())
-			defer cancel()
-			remoteConfig, err := rc.rcRepo.GetByProjectID(ctx, pid)
-			if err != nil {
-				if err == pgx.ErrNoRows {
-					util.WriteStatus(w, http.StatusNotFound)
-				} else {
-					util.WriteInternalServerError(w)
-				}
-				return
-			}
-			ctx, cancel = util.GetContextWithTimeout(r.Context())
-			defer cancel()
-			err = rc.rcCache.Update(ctx, remoteConfig)
-			if err != nil && err != redis.Nil {
-				log.Println(err)
-				util.WriteInternalServerError(w)
-				return
-			}
-			if vi >= remoteConfig.Version {
-				util.WriteStatus(w, http.StatusNotFound)
-				return
-			}
-			util.WriteJson(w, remoteConfig)
-		} else {
-			util.WriteInternalServerError(w)
-		}
+		util.WriteStatus(w, http.StatusNotFound)
 		return
 	}
 	if vi >= *v {
@@ -163,14 +135,6 @@ func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.
 	ctx, cancel = util.GetContextWithTimeout(r.Context())
 	defer cancel()
 	err = rc.rcRepo.Update(ctx, remoteConfig)
-	if err != nil {
-		log.Println(err)
-		util.WriteInternalServerError(w)
-		return
-	}
-	ctx, cancel = util.GetContextWithTimeout(r.Context())
-	defer cancel()
-	err = rc.rcCache.Update(ctx, remoteConfig)
 	if err != nil {
 		log.Println(err)
 		util.WriteInternalServerError(w)

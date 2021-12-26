@@ -18,6 +18,18 @@ type RemoteConfigRedisCache struct {
 	scriptUpdateRC string
 }
 
+func (c *RemoteConfigRedisCache) GetDataExistsByProjectID(ctx context.Context, pid string) (bool, error) {
+	ret, err := c.rdb.Exists(
+		ctx,
+		fmt.Sprintf("%s.v", pid),
+		fmt.Sprintf("%s.d", pid),
+	).Result()
+	if err != nil {
+		return false, err
+	}
+	return ret == 2, nil
+}
+
 func (c *RemoteConfigRedisCache) GetVersionByProjectID(ctx context.Context, pid string) (*int, error) {
 	v, err := c.rdb.GetEx(ctx, fmt.Sprintf("%s.v", pid), c.dataExpiry).Result()
 	if err != nil {

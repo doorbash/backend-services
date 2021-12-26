@@ -18,7 +18,7 @@ fi
 chmod 777 docker/pg-admin/
 chmod 777 docker/pg-admin/servers.json
 
-if [ "$1" == "production" ]; then
+if [ "$1" == "prod" ]; then
     sudo docker-compose pull && sudo docker-compose up -d --force-recreate --no-build
     exit 0
 fi
@@ -31,10 +31,10 @@ if [ $? -ne 0 ]; then
 fi
 cd ..
 
-cd notification
+cd loop
 CGO_ENABLED=0 go build
 if [ $? -ne 0 ]; then
-    echo "Error while building notifications"
+    echo "Error while building loop"
     exit 1
 fi
 cd ..

@@ -58,8 +58,8 @@ services:
       - db
       - redis
     image: ghcr.io/doorbash/backend-services-api:${APP_VERSION}
-  notification:
-    build: ./notification
+  loop:
+    build: ./loop
     restart: always
     logging:
       driver: "json-file"
@@ -71,7 +71,7 @@ services:
       DATABASE_NAME: ${DATABASE_NAME}
     depends_on:
       - db
-    image: ghcr.io/doorbash/backend-services-notification:${APP_VERSION}
+    image: ghcr.io/doorbash/backend-services-loop:${APP_VERSION}
   nginx:
     restart: always
     logging:

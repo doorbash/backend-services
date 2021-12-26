@@ -2,11 +2,8 @@ package pg
 
 import (
 	"context"
-	"errors"
-	"time"
 
 	"github.com/doorbash/backend-services/api/domain"
-	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
@@ -32,7 +29,8 @@ func CreateNotificationsTable() (query string) {
 	create_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 	active_time TIMESTAMP WITH TIME ZONE,
 	expire_time TIMESTAMP WITH TIME ZONE,
-	schedule_time TIMESTAMP WITH TIME ZONE
+	schedule_time TIMESTAMP WITH TIME ZONE,
+	modified BOOLEAN DEFAULT TRUE
 );`
 }
 
@@ -155,44 +153,6 @@ func (n *NotificationPostgresRepository) Update(ctx context.Context, notificatio
 func (n *NotificationPostgresRepository) Delete(ctx context.Context, notification *domain.Notification) error {
 	_, err := n.pool.Exec(ctx, "DELETE FROM notifications WHERE id = $1", notification.ID)
 	return err
-}
-
-func (n *NotificationPostgresRepository) GetDataByPID(ctx context.Context, pid string) (*time.Time, *int32, *string, *string, error) {
-	row := n.pool.QueryRow(ctx, `WITH schedules AS (SELECT MIN(schedule_time) AS schedule_min FROM notifications WHERE pid = $1 AND status = 2)
-SELECT
-MAX(active_time) AS active_time,
-EXTRACT(EPOCH FROM LEAST(MIN(expire_time), (select schedule_min from schedules)) - CURRENT_TIMESTAMP)::INT AS expire,
-STRING_AGG(id::TEXT, ' ' ORDER BY id ASC) AS ids,
-'[' || STRING_AGG(CONCAT('{"id":', id, ',"title":"', title, '","text":"', text, '","image":"', image, '","priority":"', priority, '","style":"', style, '","action":"', action, '","extra":"', extra, '","active_time":"', to_char((active_time::timestamp), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), '"}'), ',') || ']' AS data
-FROM notifications
-WHERE pid = $1 AND status = 1
-ORDER BY active_time ASC`, pid)
-	var activeTime pgtype.Timestamptz
-	var expire pgtype.Int4
-	var ids pgtype.Text
-	var data pgtype.Text
-	err := row.Scan(
-		&activeTime,
-		&expire,
-		&ids,
-		&data,
-	)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	if activeTime.Status == pgtype.Null {
-		return nil, nil, nil, nil, errors.New("active_time is null")
-	}
-	if expire.Status == pgtype.Null {
-		return nil, nil, nil, nil, errors.New("expire is null")
-	}
-	if ids.Status == pgtype.Null {
-		return nil, nil, nil, nil, errors.New("ids is null")
-	}
-	if data.Status == pgtype.Null {
-		return nil, nil, nil, nil, errors.New("data is null")
-	}
-	return &activeTime.Time, &expire.Int, &ids.String, &data.String, nil
 }
 
 func NewNotificationPostgresRepository(pool *pgxpool.Pool) *NotificationPostgresRepository {
