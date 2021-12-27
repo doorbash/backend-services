@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/doorbash/backend-services/api/cache"
 	_redis "github.com/doorbash/backend-services/api/cache/redis"
 	"github.com/doorbash/backend-services/api/domain"
 	_pg "github.com/doorbash/backend-services/api/repository/pg"
@@ -26,7 +27,7 @@ func UpdateRemoteConfigs(
 	log.Println("UpdateRemoteConfigs()")
 	ctx, cancel := util.GetContextWithTimeout(context.Background())
 	defer cancel()
-	rows, err := pool.Query(ctx, "SELECT pid, data, version, modified FROM remote_config WHERE data IS NOT NULL")
+	rows, err := pool.Query(ctx, "SELECT pid, data, version, modified FROM remote_configs WHERE data IS NOT NULL")
 	if err != nil {
 		return err
 	}
@@ -74,6 +75,7 @@ func UpdateRemoteConfigs(
 }
 
 func UpdateNotifications(pool *pgxpool.Pool, noCache domain.NotificationCache) error {
+	log.Println("UpdateNotifications()")
 	now := time.Now()
 
 	// scheduled(2) -> active(1)
@@ -284,6 +286,10 @@ func main() {
 
 	noCache := _redis.NewNotificationRedisCache()
 	rcCache := _redis.NewRemoteConfigRedisCache(24 * time.Hour)
+
+	if err := cache.InitCacheScripts(rcCache, noCache); err != nil {
+		log.Fatalln(err)
+	}
 
 	for {
 		err := UpdateRemoteConfigs(pool, rcRepo, rcCache)

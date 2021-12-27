@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 
-	_cache "github.com/doorbash/backend-services/api/cache"
+	"github.com/doorbash/backend-services/api/cache"
 	_redis "github.com/doorbash/backend-services/api/cache/redis"
 	handler "github.com/doorbash/backend-services/api/handler"
 	auth "github.com/doorbash/backend-services/api/handler/auth"
@@ -63,17 +63,6 @@ func initDatabase() *pgxpool.Pool {
 	return pool
 }
 
-func initCacheScripts(caches ..._cache.Cache) error {
-	for _, c := range caches {
-		ctx, cancel := util.GetContextWithTimeout(context.Background())
-		defer cancel()
-		if err := c.LoadScripts(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func main() {
 	pool := initDatabase()
 	defer pool.Close()
@@ -87,7 +76,7 @@ func main() {
 	rcCache := _redis.NewRemoteConfigRedisCache(24 * time.Hour)
 	noCache := _redis.NewNotificationRedisCache()
 
-	if err := initCacheScripts(rcCache, noCache); err != nil {
+	if err := cache.InitCacheScripts(rcCache, noCache); err != nil {
 		log.Fatalln(err)
 	}
 
