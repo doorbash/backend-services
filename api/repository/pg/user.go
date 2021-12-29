@@ -11,14 +11,16 @@ type UserPostgresRepository struct {
 	pool *pgxpool.Pool
 }
 
-func CreateUserTable() string {
-	return `CREATE TABLE IF NOT EXISTS users
-(
-	id SERIAL NOT NULL PRIMARY KEY,
-	email VARCHAR(200) NOT NULL UNIQUE CHECK (email ~ '^[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$'),
-	project_quota INTEGER NOT NULL DEFAULT 0 CHECK(project_quota >= 0),
-	num_projects INTEGER NOT NULL DEFAULT 0 CHECK(num_projects >= 0) CHECK(project_quota = 0 OR project_quota >= num_projects)
-);`
+func CreateUsers() []string {
+	return []string{
+		`CREATE TABLE IF NOT EXISTS users
+		(
+			id SERIAL NOT NULL PRIMARY KEY,
+			email VARCHAR(200) NOT NULL UNIQUE CHECK (email ~ '^[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$'),
+			project_quota INTEGER NOT NULL DEFAULT 0 CHECK(project_quota >= 0),
+			num_projects INTEGER NOT NULL DEFAULT 0 CHECK(num_projects >= 0) CHECK(project_quota = 0 OR project_quota >= num_projects)
+		);`,
+	}
 }
 
 func (u *UserPostgresRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {

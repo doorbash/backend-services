@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/doorbash/backend-services/api/cache"
@@ -27,28 +27,28 @@ func UpdateRemoteConfigs(
 	log.Println("UpdateRemoteConfigs()")
 	ctx, cancel := util.GetContextWithTimeout(context.Background())
 	defer cancel()
-	rows, err := pool.Query(ctx, "SELECT pid, data, version, modified FROM remote_configs WHERE data IS NOT NULL")
+	rows, err := pool.Query(ctx, "SELECT pid, version FROM remote_configs WHERE data IS NOT NULL")
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		var pid string
-		var data string
 		var version int
-		var modified bool
-		err := rows.Scan(&pid, &data, &version, &modified)
-		if err != nil {
-			return err
-		}
-		log.Println("pid =", pid, "data =", data, "version =", version, "modified =", modified)
-		ctx, cancel := util.GetContextWithTimeout(context.Background())
-		defer cancel()
-		exists, err := rcCache.GetDataExistsByProjectID(ctx, pid)
+		err := rows.Scan(&pid, &version)
 		if err != nil {
 			return err
 		}
 
-		if !exists || modified {
+		log.Println("pid =", pid, "version =", version)
+
+		ctx, cancel := util.GetContextWithTimeout(context.Background())
+		defer cancel()
+		v, err := rcCache.GetVersionByProjectID(ctx, pid)
+		if err != nil && err != redis.Nil {
+			return err
+		}
+
+		if err == redis.Nil || version > *v {
 			ctx, cancel := util.GetContextWithTimeout(context.Background())
 			defer cancel()
 			remoteConfig, err := rcRepo.GetByProjectID(ctx, pid)
@@ -59,13 +59,6 @@ func UpdateRemoteConfigs(
 			ctx, cancel = util.GetContextWithTimeout(context.Background())
 			defer cancel()
 			err = rcCache.Update(ctx, remoteConfig)
-			if err != nil && err != redis.Nil {
-				log.Println(err)
-				continue
-			}
-			ctx, cancel = util.GetContextWithTimeout(context.Background())
-			defer cancel()
-			_, err = pool.Exec(ctx, "UPDATE remote_configs SET modified = FALSE where pid = $1", pid)
 			if err != nil {
 				log.Println(err)
 			}
@@ -105,24 +98,16 @@ func UpdateNotifications(pool *pgxpool.Pool, noCache domain.NotificationCache) e
 	// udpate notification views_count, clicks_count
 	ctx, cancel = util.GetContextWithTimeout(context.Background())
 	defer cancel()
-	rows, err := pool.Query(ctx, "SELECT STRING_AGG(CONCAT(id::TEXT, ':', clicks_count::TEXT), ' ' ORDER BY id ASC) as clicks_count, pid FROM notifications WHERE status = 1 GROUP BY pid")
+	rows, err := pool.Query(ctx, "SELECT DISTINCT pid FROM notifications WHERE status = 1")
 	if err != nil {
 		return err
 	}
 
 	for rows.Next() {
-		var c string
 		var pid string
-		err := rows.Scan(&c, &pid)
+		err := rows.Scan(&pid)
 		if err != nil {
 			return err
-		}
-
-		cArr := strings.Split(c, " ")
-		clicks := make(map[string]string)
-		for _, v := range cArr {
-			parts := strings.Split(v, ":")
-			clicks[parts[0]] = parts[1]
 		}
 
 		ctx, cancel = util.GetContextWithTimeout(context.Background())
@@ -151,110 +136,59 @@ func UpdateNotifications(pool *pgxpool.Pool, noCache domain.NotificationCache) e
 			return err
 		}
 
-		for k, v := range clicks {
-			cc, ok := rClicks[k]
-			if !ok {
-				continue
-			}
-			if v == cc {
+		for k, v := range rClicks {
+			if v == "0" {
 				continue
 			}
 			ctx, cancel = util.GetContextWithTimeout(context.Background())
 			defer cancel()
-			_, err := pool.Exec(ctx, "UPDATE notifications SET clicks_count = $1 WHERE status = 1 AND id = $2", cc, k)
+			_, err := pool.Exec(ctx, "UPDATE notifications SET clicks_count = clicks_count + $1 WHERE status = 1 AND id = $2", v, k)
 			if err != nil {
 				return err
 			}
 		}
-	}
 
-	// update notifications cache
-	ctx, cancel = util.GetContextWithTimeout(context.Background())
-	defer cancel()
-	rows, err = pool.Query(ctx, "SELECT pid, bool_or(modified) AS modified FROM notifications WHERE status = 1 GROUP BY pid")
-	if err != nil {
-		return err
-	}
+		err = updateNotificationData(pool, noCache, pid)
 
-	for rows.Next() {
-		var pid string
-		var modified bool
-		rows.Scan(&pid, &modified)
-		err := rows.Scan(&pid, &modified)
 		if err != nil {
-			return err
-		}
-		log.Println("pid =", pid, "modified =", modified)
-		ctx, cancel := util.GetContextWithTimeout(context.Background())
-		defer cancel()
-		exists, err := noCache.GetDataExistsByProjectID(ctx, pid)
-		if err != nil {
-			return err
-		}
-		if !exists || modified {
-			ctx, cancel := util.GetContextWithTimeout(context.Background())
-			defer cancel()
-
-			row := pool.QueryRow(ctx, `WITH schedules AS (SELECT MIN(schedule_time) AS schedule_min FROM notifications WHERE pid = $1 AND status = 2)
-SELECT
-MAX(active_time) AS active_time,
-EXTRACT(EPOCH FROM LEAST(MIN(expire_time), (select schedule_min from schedules)) - CURRENT_TIMESTAMP)::INT AS expire,
-STRING_AGG(id::TEXT, ' ' ORDER BY id ASC) AS ids,
-'[' || STRING_AGG(CONCAT('{"id":', id, ',"title":"', title, '","text":"', text, '","image":"', image, '","priority":"', priority, '","style":"', style, '","action":"', action, '","extra":"', extra, '","active_time":"', to_char((active_time::timestamp), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), '"}'), ',') || ']' AS data
-FROM notifications
-WHERE pid = $1 AND status = 1
-ORDER BY active_time ASC`, pid)
-			var activeTime pgtype.Timestamptz
-			var expire pgtype.Int4
-			var ids pgtype.Text
-			var data pgtype.Text
-			err := row.Scan(
-				&activeTime,
-				&expire,
-				&ids,
-				&data,
-			)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
-			if activeTime.Status == pgtype.Null {
-				log.Println("active_time is null")
-				continue
-			}
-			if expire.Status == pgtype.Null {
-				log.Println("expire is null")
-				continue
-			}
-			if ids.Status == pgtype.Null {
-				log.Println("ids is null")
-				continue
-			}
-			if data.Status == pgtype.Null {
-				log.Println("data is null")
-				continue
-			}
-			if expire.Int < 0 {
-				log.Println(fmt.Sprint("expire < 0, expire:", &expire.Int, "seconds"))
-				continue
-			}
-			ctx, cancel = util.GetContextWithTimeout(context.Background())
-			defer cancel()
-			err = noCache.UpdateProjectData(ctx, pid, ids.String, data.String, activeTime.Time, time.Duration(expire.Int)*time.Second)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
-			ctx, cancel = util.GetContextWithTimeout(context.Background())
-			defer cancel()
-			_, err = pool.Exec(ctx, "UPDATE notifications SET modified = FALSE WHERE pid = $1", pid)
-			if err != nil {
-				log.Printf("notifications cache update: (pid = %s) error: %s\n", pid, err)
-			}
+			log.Println(err)
 		}
 	}
 
 	return nil
+}
+
+func updateNotificationData(pool *pgxpool.Pool, noCache domain.NotificationCache, pid string) error {
+	ctx, cancel := util.GetContextWithTimeout(context.Background())
+	defer cancel()
+
+	row := pool.QueryRow(ctx, "SELECT _active_time, _ids, _data FROM notifications_data($1)", pid)
+	var activeTime pgtype.Timestamptz
+	var ids pgtype.Text
+	var data pgtype.Text
+	err := row.Scan(
+		&activeTime,
+		&ids,
+		&data,
+	)
+	if err != nil {
+		return err
+	}
+	if activeTime.Status == pgtype.Null {
+		return errors.New("active_time is null")
+	}
+	if ids.Status == pgtype.Null {
+		return errors.New("ids is null")
+	}
+	if data.Status == pgtype.Null {
+		return errors.New("data is null")
+	}
+
+	log.Println(">>>>>>>>>>>>", "ids=", ids.String, ",data=", data.String, ",t=", activeTime.Time)
+
+	ctx, cancel = util.GetContextWithTimeout(context.Background())
+	defer cancel()
+	return noCache.UpdateProjectData(ctx, pid, ids.String, data.String, activeTime.Time, 15*time.Minute)
 }
 
 func main() {
@@ -291,15 +225,19 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	go func() {
+		err := UpdateNotifications(pool, noCache)
+		if err != nil {
+			log.Println(err)
+		}
+		time.Sleep(10 * time.Minute)
+	}()
+
 	for {
 		err := UpdateRemoteConfigs(pool, rcRepo, rcCache)
 		if err != nil {
 			log.Println(err)
 		}
-		err = UpdateNotifications(pool, noCache)
-		if err != nil {
-			log.Println(err)
-		}
-		time.Sleep(time.Minute)
+		time.Sleep(5 * time.Minute)
 	}
 }

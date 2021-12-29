@@ -11,14 +11,15 @@ type RemoteConfigPostgresRepository struct {
 	pool *pgxpool.Pool
 }
 
-func CreateRemoteConfigTable() string {
-	return `CREATE TABLE IF NOT EXISTS remote_configs
+func CreateRemoteConfigs() []string {
+	return []string{
+		`CREATE TABLE IF NOT EXISTS remote_configs
 (
 	pid VARCHAR(30) NOT NULL PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
 	data JSON NOT NULL,
-	version INTEGER DEFAULT 1,
-	modified BOOLEAN DEFAULT TRUE
-);`
+	version INTEGER DEFAULT 1
+);`,
+	}
 }
 
 func (rc *RemoteConfigPostgresRepository) GetByProjectID(ctx context.Context, pid string) (*domain.RemoteConfig, error) {
@@ -42,7 +43,7 @@ func (rc *RemoteConfigPostgresRepository) Insert(ctx context.Context, remoteConf
 func (rc *RemoteConfigPostgresRepository) Update(ctx context.Context, remoteConfig *domain.RemoteConfig) error {
 	row := rc.pool.QueryRow(
 		ctx,
-		"UPDATE remote_configs SET data = $1, version = version + 1, modified = TRUE WHERE pid = $2 RETURNING version",
+		"UPDATE remote_configs SET data = $1, version = version + 1 WHERE pid = $2 RETURNING version",
 		remoteConfig.Data,
 		remoteConfig.ProjectID,
 	)

@@ -168,8 +168,8 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad schedule_time: %s", st))
 			return
 		}
-		if scheduleTime.Before(time.Now().Add(5 * time.Minute)) {
-			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("schedule_time: %s must be after %s", st, time.Now().Add(5*time.Minute).Format(time.RFC3339)))
+		if scheduleTime.Before(time.Now().Add(15 * time.Minute)) {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("schedule_time: %s must be after %s", st, time.Now().Add(15*time.Minute).Format(time.RFC3339)))
 			return
 		}
 		fallthrough
@@ -185,8 +185,8 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad expire_time: %s", et))
 			return
 		}
-		if expireTime.Before(time.Now().Add(5 * time.Minute)) {
-			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("expire_time: %s must be after %s", et, time.Now().Add(5*time.Minute).Format(time.RFC3339)))
+		if expireTime.Before(time.Now().Add(30 * time.Minute)) {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("expire_time: %s must be after %s", et, time.Now().Add(30*time.Minute).Format(time.RFC3339)))
 			return
 		}
 	default:
@@ -194,7 +194,7 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	if when == "later" && expireTime.Before(scheduleTime) {
+	if when == "later" && expireTime.Before(scheduleTime.Add(30*time.Minute)) {
 		util.WriteError(w, http.StatusBadRequest, "bad expire time")
 		return
 	}
@@ -441,7 +441,7 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 		}
 		var err error
 		scheduleTime, err = time.Parse(time.RFC3339, st)
-		if err != nil || scheduleTime.Before(time.Now().Add(5*time.Minute)) {
+		if err != nil || scheduleTime.Before(time.Now().Add(15*time.Minute)) {
 			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad schedule_time: %s", st))
 			return
 		}
@@ -452,12 +452,12 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 	if et != "" {
 		var err error
 		expireTime, err = time.Parse(time.RFC3339, et)
-		if err != nil || expireTime.Before(time.Now().Add(5*time.Minute)) {
+		if err != nil || expireTime.Before(time.Now().Add(30*time.Minute)) {
 			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad expire_time: %s", et))
 			return
 		}
-		if no.Status == domain.NOTIFICATION_STATUS_SCHEDULED && expireTime.Before(scheduleTime.Add(5*time.Minute)) {
-			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("expire_time (%s) < schedule_time + 5min (%s)", et, scheduleTime.Add(5*time.Minute)))
+		if no.Status == domain.NOTIFICATION_STATUS_SCHEDULED && expireTime.Before(scheduleTime.Add(30*time.Minute)) {
+			util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("expire_time (%s) < schedule_time + 30min (%s)", et, scheduleTime.Add(30*time.Minute)))
 			return
 		}
 		no.ExpireTime = &expireTime
@@ -481,15 +481,6 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 	if err != nil {
 		log.Println(err)
 		util.WriteStatus(w, http.StatusBadRequest)
-		return
-	}
-
-	ctx, cancel = util.GetContextWithTimeout(r.Context())
-	defer cancel()
-	err = n.noCache.SetProjectDataExpire(ctx, project.ID, 30*time.Second)
-	if err != nil {
-		log.Println(err)
-		util.WriteInternalServerError(w)
 		return
 	}
 
@@ -549,15 +540,6 @@ func (n *NotificationHandler) CancelNotificationHandler(w http.ResponseWriter, r
 	if err != nil {
 		log.Println(err)
 		util.WriteStatus(w, http.StatusBadRequest)
-		return
-	}
-
-	ctx, cancel = util.GetContextWithTimeout(r.Context())
-	defer cancel()
-	err = n.noCache.SetProjectDataExpire(ctx, project.ID, 30*time.Second)
-	if err != nil {
-		log.Println(err)
-		util.WriteInternalServerError(w)
 		return
 	}
 

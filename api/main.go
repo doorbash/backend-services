@@ -44,12 +44,12 @@ func initDatabase() *pgxpool.Pool {
 		log.Fatalln("Unable to create connection pool. error:", err)
 	}
 
-	queries := []string{
-		_pg.CreateUserTable(),
-		_pg.CreateProjectTable(),
-		_pg.CreateRemoteConfigTable(),
-		_pg.CreateNotificationsTable(),
-	}
+	queries := make([]string, 0)
+
+	queries = append(queries, _pg.CreateUsers()...)
+	queries = append(queries, _pg.CreateProjects()...)
+	queries = append(queries, _pg.CreateRemoteConfigs()...)
+	queries = append(queries, _pg.CreateNotifications()...)
 
 	for _, q := range queries {
 		ctx, cancel = util.GetContextWithTimeout(context.Background())

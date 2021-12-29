@@ -11,8 +11,9 @@ type NotificationPostgresRepository struct {
 	pool *pgxpool.Pool
 }
 
-func CreateNotificationsTable() (query string) {
-	return `CREATE TABLE IF NOT EXISTS notifications
+func CreateNotifications() []string {
+	return []string{
+		`CREATE TABLE IF NOT EXISTS notifications
 (
 	id SERIAL NOT NULL PRIMARY KEY,
 	pid VARCHAR(30) NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -29,9 +30,25 @@ func CreateNotificationsTable() (query string) {
 	create_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 	active_time TIMESTAMP WITH TIME ZONE,
 	expire_time TIMESTAMP WITH TIME ZONE,
-	schedule_time TIMESTAMP WITH TIME ZONE,
-	modified BOOLEAN DEFAULT TRUE
-);`
+	schedule_time TIMESTAMP WITH TIME ZONE
+);`,
+		`CREATE FUNCTION notifications_data(p VARCHAR(30))
+RETURNS TABLE(_active_time TIMESTAMP WITH TIME ZONE, _expire INTEGER, _ids TEXT, _data TEXT)
+LANGUAGE 'plpgsql'
+
+AS $BODY$
+BEGIN
+	RETURN QUERY
+		SELECT
+		MAX(active_time) AS active_time,
+		STRING_AGG(id::TEXT, ' ' ORDER BY id ASC) AS ids,
+		'[' || STRING_AGG(CONCAT('{"id":', id, ',"title":"', title, '","text":"', text, '","image":"', image, '","priority":"', priority, '","style":"', style, '","action":"', action, '","extra":"', extra, '","active_time":"', to_char((active_time::timestamp), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), '"}'), ',') || ']' AS data
+		FROM notifications
+		WHERE pid = $1 AND status = 1
+		ORDER BY active_time ASC;
+	END
+$BODY$;`,
+	}
 }
 
 func (n *NotificationPostgresRepository) GetByID(ctx context.Context, id int) (*domain.Notification, error) {

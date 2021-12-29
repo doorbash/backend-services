@@ -12,13 +12,15 @@ type ProjectPostgresRepository struct {
 	pool *pgxpool.Pool
 }
 
-func CreateProjectTable() string {
-	return `CREATE TABLE IF NOT EXISTS projects
+func CreateProjects() []string {
+	return []string{
+		`CREATE TABLE IF NOT EXISTS projects
 (
 	id VARCHAR(30) NOT NULL PRIMARY KEY CHECK (id ~ '^[A-Za-z0-9._-]+'),
 	uid INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	name VARCHAR(200) NOT NULL
-);`
+);`,
+	}
 }
 
 func (rc *ProjectPostgresRepository) GetByID(ctx context.Context, id string) (*domain.Project, error) {
