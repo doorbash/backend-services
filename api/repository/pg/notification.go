@@ -33,7 +33,7 @@ func CreateNotifications() []string {
 	schedule_time TIMESTAMP WITH TIME ZONE
 );`,
 		`CREATE FUNCTION notifications_data(p VARCHAR(30))
-RETURNS TABLE(_active_time TIMESTAMP WITH TIME ZONE, _expire INTEGER, _ids TEXT, _data TEXT)
+RETURNS TABLE(_active_time TIMESTAMP WITH TIME ZONE, _ids TEXT, _data TEXT)
 LANGUAGE 'plpgsql'
 
 AS $BODY$
