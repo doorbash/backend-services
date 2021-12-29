@@ -72,7 +72,7 @@ func main() {
 	projectRepo := _pg.NewProjectPostgresRepository(pool)
 	noRepo := _pg.NewNotificationPostgresRepository(pool)
 
-	authCache := _redis.NewAuthRedisCache(1 * time.Hour)
+	authCache := _redis.NewAuthRedisCache(6 * time.Hour)
 	rcCache := _redis.NewRemoteConfigRedisCache(24 * time.Hour)
 	noCache := _redis.NewNotificationRedisCache()
 
