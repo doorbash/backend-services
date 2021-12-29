@@ -226,11 +226,13 @@ func main() {
 	}
 
 	go func() {
-		err := UpdateNotifications(pool, noCache)
-		if err != nil {
-			log.Println(err)
+		for {
+			err := UpdateNotifications(pool, noCache)
+			if err != nil {
+				log.Println(err)
+			}
+			time.Sleep(10 * time.Minute)
 		}
-		time.Sleep(10 * time.Minute)
 	}()
 
 	for {

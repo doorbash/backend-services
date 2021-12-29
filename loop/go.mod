@@ -3,7 +3,7 @@ module github.com/doorbash/backend-services/loop
 go 1.17
 
 require (
-	github.com/doorbash/backend-services/api v0.0.0-20211227074724-18738d3497c8
+	github.com/doorbash/backend-services/api v0.0.0-20211229113926-f87f1c68f6b9
 	github.com/go-redis/redis/v8 v8.11.4
 	github.com/jackc/pgtype v1.9.1
 	github.com/jackc/pgx/v4 v4.14.1

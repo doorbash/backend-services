@@ -18,7 +18,9 @@ type Notification struct {
 	Status       int        `json:"status"`
 	Title        string     `json:"title"`
 	Text         string     `json:"text"`
+	BigText      *string    `json:"big-text,omitempty"`
 	Image        *string    `json:"image,omitempty"`
+	BigImage     *string    `json:"big-image,omitempty"`
 	Priority     string     `json:"priority"`
 	Style        string     `json:"style"`
 	Action       *string    `json:"action,omitempty"`

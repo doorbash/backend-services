@@ -252,11 +252,28 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		return
 	}
 
+	var bigText string
+	var bigImage string
+
 	style, _ := body["style"].(string)
 	switch style {
 	case "normal", "big":
 	case "":
 		style = "normal"
+	case "big-text":
+		bigText, _ = body["big-text"].(string)
+		if bigText == "" {
+			log.Println("no big-text")
+			util.WriteError(w, http.StatusBadRequest, "no big-text")
+			return
+		}
+	case "big-image":
+		bigImage, _ = body["big-image"].(string)
+		if bigImage == "" {
+			log.Println("no big-image")
+			util.WriteError(w, http.StatusBadRequest, "no big-image")
+			return
+		}
 	default:
 		log.Println("bad style:", style)
 		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad style %s", style))
@@ -288,6 +305,14 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		CreateTime: &now,
 		Priority:   priority,
 		Style:      style,
+	}
+
+	if bigText != "" {
+		no.BigText = &bigText
+	}
+
+	if bigImage != "" {
+		no.BigImage = &bigImage
 	}
 
 	if image != "" {
@@ -342,6 +367,8 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 	st, _ := body["schedule_time"].(string)
 	et, _ := body["expire_time"].(string)
 	action, _ := body["action"].(string)
+	bigText, _ := body["big-text"].(string)
+	bigImage, _ := body["big-image"].(string)
 
 	var extra string
 	switch action {
@@ -377,7 +404,7 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 
 	style, _ := body["style"].(string)
 	switch style {
-	case "", "normal", "big":
+	case "", "normal", "big", "big-text", "big-image":
 	default:
 		log.Println("bad style:", style)
 		util.WriteError(w, http.StatusBadRequest, fmt.Sprintf("bad style %s", style))
@@ -418,6 +445,22 @@ func (n *NotificationHandler) UpdateNotificationHandler(w http.ResponseWriter, r
 
 	if text != "" {
 		no.Text = text
+	}
+
+	if bigText != "" {
+		if no.Style != "big-text" {
+			util.WriteError(w, http.StatusBadRequest, "notification style is not big-text")
+			return
+		}
+		no.BigText = &bigText
+	}
+
+	if bigImage != "" {
+		if no.Style != "big-image" {
+			util.WriteError(w, http.StatusBadRequest, "notification style is not big-image")
+			return
+		}
+		no.BigImage = &bigImage
 	}
 
 	if action != "" {
