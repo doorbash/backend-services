@@ -71,6 +71,7 @@ services:
       DATABASE_NAME: ${DATABASE_NAME}
     depends_on:
       - db
+      - redis
     image: ghcr.io/doorbash/backend-services-loop:${APP_VERSION}
   nginx:
     restart: always
