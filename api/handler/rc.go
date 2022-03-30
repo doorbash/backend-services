@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/doorbash/backend-services/api/domain"
 	"github.com/doorbash/backend-services/api/util"
@@ -140,6 +141,29 @@ func (rc *RemoteConfigHandler) UpdateDataHandler(w http.ResponseWriter, r *http.
 		util.WriteInternalServerError(w)
 		return
 	}
+
+	topic, ok := mux.Vars(r)["topic"]
+	if ok && topic != "" {
+		fmt.Println("ok topic is ", topic)
+		b, err := json.Marshal(remoteConfig)
+		if err != nil {
+			log.Println(err)
+			util.WriteStatus(w, http.StatusBadRequest)
+			return
+		}
+		ctx, cancel = util.GetContextWithThisTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		err = util.SendNotification(ctx, project.ID, topic, map[string]string{
+			"type": "rc",
+			"data": string(b),
+		})
+		if err != nil {
+			log.Println(err)
+			util.WriteStatus(w, http.StatusBadRequest)
+			return
+		}
+	}
+
 	util.WriteJson(w, remoteConfig)
 }
 
@@ -161,6 +185,7 @@ func NewRemoteConfigHandler(
 	authRouter := rc.router.NewRoute().Subrouter()
 	authRouter.Use(authMiddleware, middleware.JsonBodyMiddleware)
 	authRouter.HandleFunc("/{id}/rc", rc.UpdateDataHandler).Methods("POST")
+	authRouter.HandleFunc("/{id}/rc/fcm/{topic}", rc.UpdateDataHandler).Methods("POST")
 
 	return rc
 }

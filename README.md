@@ -34,7 +34,7 @@ docker/nginx/cert/privkey.pem
 
 - Create `.env`:
 ```
-APP_VERSION=1.2
+APP_VERSION=1.3
 
 API_MODE="private"
 API_LISTEN_ADDR=":8080"
@@ -51,9 +51,9 @@ AUTH_SESSION_KEY="PUT_A_RANDOM_LONG_STRING_HERE"
 PGADMIN_DEFAULT_EMAIL="PUT_PG_ADMIN_EMAIL_HERE"
 PGADMIN_DEFAULT_PASSWORD="PUT_PG_ADMIN_PASSWORD_HERE"
 
-IMAGE_POSTGRES="postgres:14.1-alpine3.15"
-IMAGE_PGADMIN="dpage/pgadmin4:6.3"
-IMAGE_NGINX="nginx:1.21.4-alpine"
+IMAGE_POSTGRES="postgres:14.2-alpine3.15"
+IMAGE_PGADMIN="dpage/pgadmin4:6.7"
+IMAGE_NGINX="nginx:1.21.6-alpine"
 IMAGE_REDIS="redis:6.2.6-alpine3.15"
 ```
 

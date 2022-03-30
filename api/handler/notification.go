@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
@@ -335,13 +336,36 @@ func (n *NotificationHandler) NewNotificationHandler(w http.ResponseWriter, r *h
 		no.ExpireTime = &expireTime
 	}
 
-	ctx, cancel = util.GetContextWithTimeout(r.Context())
-	defer cancel()
-	err = n.noRepo.Insert(ctx, no)
-	if err != nil {
-		log.Println(err)
-		util.WriteStatus(w, http.StatusBadRequest)
-		return
+	topic, ok := mux.Vars(r)["topic"]
+	if !ok || topic == "" {
+		ctx, cancel = util.GetContextWithTimeout(r.Context())
+		defer cancel()
+		err = n.noRepo.Insert(ctx, no)
+		if err != nil {
+			log.Println(err)
+			util.WriteStatus(w, http.StatusBadRequest)
+			return
+		}
+	} else {
+		rand.Seed(time.Now().UnixNano())
+		no.ID = rand.Intn(10000000) + 1
+		b, err := json.Marshal(no)
+		if err != nil {
+			log.Println(err)
+			util.WriteStatus(w, http.StatusBadRequest)
+			return
+		}
+		ctx, cancel = util.GetContextWithThisTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		err = util.SendNotification(ctx, project.ID, topic, map[string]string{
+			"type": "notification",
+			"data": string(b),
+		})
+		if err != nil {
+			log.Println(err)
+			util.WriteStatus(w, http.StatusBadRequest)
+			return
+		}
 	}
 
 	util.WriteJson(w, no)
@@ -613,6 +637,7 @@ func NewNotificationHandler(
 	jsonRouter := authRouter.NewRoute().Subrouter()
 	jsonRouter.Use(middleware.JsonBodyMiddleware)
 	jsonRouter.HandleFunc("/{id}/notifications/new", n.NewNotificationHandler).Methods("POST")
+	jsonRouter.HandleFunc("/{id}/notifications/new/fcm/{topic}", n.NewNotificationHandler).Methods("POST")
 	jsonRouter.HandleFunc("/notifications/update", n.UpdateNotificationHandler).Methods("POST")
 	jsonRouter.HandleFunc("/notifications/cancel", n.CancelNotificationHandler).Methods("POST")
 

@@ -31,6 +31,7 @@ type Notification struct {
 	ActiveTime   *time.Time `json:"active_time"`
 	ExpireTime   *time.Time `json:"expire_time"`
 	ScheduleTime *time.Time `json:"schedule_time"`
+	ClickReport  bool       `json:"click_report"`
 }
 
 type NotificationRepository interface {

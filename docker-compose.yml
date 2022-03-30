@@ -44,6 +44,8 @@ services:
       driver: "json-file"
       options:
         max-size: "200m"
+    volumes: 
+      - ./docker/fcm:/fcm:ro
     environment: 
       API_MODE: ${API_MODE}
       API_ADMIN_EMAIL: ${API_ADMIN_EMAIL}
