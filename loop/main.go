@@ -110,6 +110,12 @@ func UpdateNotifications(pool *pgxpool.Pool, noCache domain.NotificationCache) e
 			return err
 		}
 
+		err = updateNotificationData(pool, noCache, pid)
+
+		if err != nil {
+			log.Println(err)
+		}
+
 		ctx, cancel = util.GetContextWithTimeout(context.Background())
 		defer cancel()
 		views, err := noCache.GetViewsByProjectID(ctx, pid)
@@ -146,12 +152,6 @@ func UpdateNotifications(pool *pgxpool.Pool, noCache domain.NotificationCache) e
 			if err != nil {
 				return err
 			}
-		}
-
-		err = updateNotificationData(pool, noCache, pid)
-
-		if err != nil {
-			log.Println(err)
 		}
 	}
 
