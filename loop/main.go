@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -19,6 +20,10 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
+const REMOTE_CONFIG_NOTIFICATION_MAX = 6
+
+var rcNotificationCounter = 0
+
 func UpdateRemoteConfigs(
 	pool *pgxpool.Pool,
 	rcRepo domain.RemoteConfigRepository,
@@ -31,6 +36,14 @@ func UpdateRemoteConfigs(
 	if err != nil {
 		return err
 	}
+
+	shouldSendNotification := false
+	if rcNotificationCounter >= REMOTE_CONFIG_NOTIFICATION_MAX {
+		shouldSendNotification = true
+		rcNotificationCounter = 0
+	}
+	rcNotificationCounter++
+
 	for rows.Next() {
 		var pid string
 		var version int
@@ -61,6 +74,38 @@ func UpdateRemoteConfigs(
 			err = rcCache.Update(ctx, remoteConfig)
 			if err != nil {
 				log.Println(err)
+			}
+		}
+
+		if shouldSendNotification {
+			ctx, cancel = util.GetContextWithTimeout(context.Background())
+			defer cancel()
+			data, err := rcCache.GetDataByProjectID(ctx, pid)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+
+			remoteConfig := domain.RemoteConfig{
+				ProjectID: pid,
+				Version:   version,
+				Data:      *data,
+			}
+
+			b, err := json.Marshal(remoteConfig)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			ctx, cancel = util.GetContextWithThisTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			err = util.SendNotification(ctx, pid, "all", map[string]string{
+				"type": "rc",
+				"data": string(b),
+			})
+			if err != nil {
+				log.Println(err)
+				continue
 			}
 		}
 	}
