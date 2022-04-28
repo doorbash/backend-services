@@ -20,9 +20,9 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-const REMOTE_CONFIG_NOTIFICATION_MAX = 6
+const REMOTE_CONFIG_FCM_MAX = 6
 
-var rcNotificationCounter = 0
+var rcFcmCounter = 0
 
 func UpdateRemoteConfigs(
 	pool *pgxpool.Pool,
@@ -38,11 +38,11 @@ func UpdateRemoteConfigs(
 	}
 
 	shouldSendNotification := false
-	if rcNotificationCounter >= REMOTE_CONFIG_NOTIFICATION_MAX {
+	if rcFcmCounter >= REMOTE_CONFIG_FCM_MAX {
 		shouldSendNotification = true
-		rcNotificationCounter = 0
+		rcFcmCounter = 0
 	}
-	rcNotificationCounter++
+	rcFcmCounter++
 
 	for rows.Next() {
 		var pid string
