@@ -67,6 +67,8 @@ services:
       driver: "json-file"
       options:
         max-size: "200m"
+    volumes:
+      - ./docker/fcm:/fcm:ro
     environment:
       DATABASE_USER: ${DATABASE_USER}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
