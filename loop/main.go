@@ -38,11 +38,11 @@ func UpdateRemoteConfigs(
 	}
 
 	shouldSendNotification := false
-	if rcFcmCounter >= REMOTE_CONFIG_FCM_MAX {
-		shouldSendNotification = true
-		rcFcmCounter = 0
-	}
-	rcFcmCounter++
+	// if rcFcmCounter >= REMOTE_CONFIG_FCM_MAX {
+	// 	shouldSendNotification = true
+	// 	rcFcmCounter = 0
+	// }
+	// rcFcmCounter++
 
 	for rows.Next() {
 		var pid string
