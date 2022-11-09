@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   redis:
-    restart: always
+    restart: unless-stopped
     logging:
       driver: "json-file"
       options:
@@ -10,7 +10,7 @@ services:
       - ./docker/redis:/data
     image: ${IMAGE_REDIS}
   db:
-    restart: always
+    restart: unless-stopped
     logging:
       driver: "json-file"
       options:
@@ -23,7 +23,7 @@ services:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
     image: ${IMAGE_POSTGRES}
   pg-admin:
-    restart: always
+    restart: unless-stopped
     logging:
       driver: "json-file"
       options:
@@ -39,7 +39,7 @@ services:
     image: ${IMAGE_PGADMIN}
   api:
     build: ./api
-    restart: always
+    restart: unless-stopped
     logging:
       driver: "json-file"
       options:
@@ -62,7 +62,7 @@ services:
     image: ghcr.io/doorbash/backend-services-api:${APP_VERSION}
   loop:
     build: ./loop
-    restart: always
+    restart: unless-stopped
     logging:
       driver: "json-file"
       options:
@@ -77,7 +77,7 @@ services:
       - api
     image: ghcr.io/doorbash/backend-services-loop:${APP_VERSION}
   nginx:
-    restart: always
+    restart: unless-stopped
     logging:
       driver: "json-file"
       options:
